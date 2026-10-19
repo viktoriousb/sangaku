@@ -1,0 +1,4 @@
+// Copy to Local.xcconfig (gitignored) to sign with your Apple Development certificate.
+// A stable signature keeps Keychain access (API keys, Milestone 2) from being re-prompted after each build.
+DEVELOPMENT_TEAM = YOURTEAMID
+CODE_SIGN_IDENTITY = Apple Development

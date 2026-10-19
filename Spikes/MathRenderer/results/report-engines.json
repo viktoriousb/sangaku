@@ -1,0 +1,60 @@
+{
+  "engines" : [
+    {
+      "afterAllMB" : 195.6409912109375,
+      "covered" : 78,
+      "drawAllMs" : 33.585875511169434,
+      "failures" : {
+        "\\begin{CD} A @>f>> B \\\\ @VgVV @VVhV \\\\ C @>>k> D \\end{CD}" : "Unknown environment: CD"
+      },
+      "initMB" : 5.375,
+      "initMs" : 7.708374500274658,
+      "layoutAllMs" : 20.798500061035156,
+      "name" : "MicroTeX (XITS Math)",
+      "proseFailures" : 0,
+      "proseFormulas" : 875,
+      "scroll" : {
+        "frames" : 504,
+        "hitches" : 0,
+        "maxMs" : 8.36604181677103,
+        "medianMs" : 8.333333302289248,
+        "nominalMs" : 8.333333302289248,
+        "p95Ms" : 8.333333767950535,
+        "p99Ms" : 8.333333767950535,
+        "workMaxMs" : 4.553374767303467,
+        "workMedianMs" : 1.0113749504089355,
+        "workP95Ms" : 3.1878747940063477,
+        "workP99Ms" : 3.774083137512207
+      },
+      "total" : 79
+    },
+    {
+      "afterAllMB" : 77.5468978881836,
+      "covered" : 79,
+      "drawAllMs" : 29.009250164031982,
+      "failures" : {
+
+      },
+      "initMB" : 23.171897888183594,
+      "initMs" : 77.53504228591919,
+      "layoutAllMs" : 934.8934588432312,
+      "name" : "MathJax 4 (STIX Two) in JavaScriptCore",
+      "proseFailures" : 0,
+      "proseFormulas" : 875,
+      "scroll" : {
+        "frames" : 472,
+        "hitches" : 32,
+        "maxMs" : 20.878500305116177,
+        "medianMs" : 8.333333302289248,
+        "nominalMs" : 8.333333302289248,
+        "p95Ms" : 14.488874934613705,
+        "p99Ms" : 19.626458175480366,
+        "workMaxMs" : 15.632250308990479,
+        "workMedianMs" : 0.812833309173584,
+        "workP95Ms" : 10.620250225067139,
+        "workP99Ms" : 11.927083015441895
+      },
+      "total" : 79
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "hybrid" : [
+    {
+      "engine" : "MicroTeX (XITS Math)",
+      "engineFormulas" : 125,
+      "failedFormulas" : 0,
+      "fastAllMs" : 18.050249576568604,
+      "fastFormulas" : 750,
+      "scroll" : {
+        "frames" : 441,
+        "hitches" : 0,
+        "maxMs" : 8.333333767950535,
+        "medianMs" : 8.333333302289248,
+        "nominalMs" : 8.333333302289248,
+        "p95Ms" : 8.333333767950535,
+        "p99Ms" : 8.333333767950535,
+        "workMaxMs" : 8.29016637802124,
+        "workMedianMs" : 0.9003338813781738,
+        "workP95Ms" : 4.4322919845581055,
+        "workP99Ms" : 4.948666572570801
+      }
+    },
+    {
+      "engine" : "MathJax 4 (STIX Two) in JavaScriptCore",
+      "engineFormulas" : 125,
+      "failedFormulas" : 0,
+      "fastAllMs" : 282.72725009918213,
+      "fastFormulas" : 750,
+      "scroll" : {
+        "frames" : 429,
+        "hitches" : 7,
+        "maxMs" : 20.10150020942092,
+        "medianMs" : 8.333333302289248,
+        "nominalMs" : 8.333333302289248,
+        "p95Ms" : 8.333333767950535,
+        "p99Ms" : 16.822916455566883,
+        "workMaxMs" : 12.563083171844482,
+        "workMedianMs" : 0.7856664657592773,
+        "workP95Ms" : 9.220375061035156,
+        "workP99Ms" : 10.556041717529297
+      }
+    }
+  ]
+}

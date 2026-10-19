@@ -1,0 +1,84 @@
+# Formula regression corpus. Columns: style (inline|display), expected tier (typographic|engine|source), LaTeX.
+# Sources: the renderer spike's test expressions (Spikes/MathRenderer). Only material from this project.
+# A 'source' row is a formula known to be unsupported; if it starts rendering, the test fails so the row gets updated.
+inline	typographic	n_p \in \{1, q\},\ n_p \equiv 1 \pmod{p}
+inline	typographic	q \mid p + 1,\quad q \nmid p - 1
+inline	typographic	|G| = p^2 q
+inline	engine	\frac{a}{b} + \tfrac{1}{2} + \dfrac{x}{y}
+inline	engine	\binom{n}{k}
+display	engine	\sum_{k=0}^{n} \binom{n}{k} = 2^n
+display	engine	\int_0^1 f(x)\,dx
+inline	engine	\lim_{n \to \infty} a_n
+inline	engine	\left( \frac{p}{q} \right)
+inline	engine	\sqrt[3]{x} + \sqrt{2}
+inline	typographic	a \bmod n,\ a \equiv b \pmod{n}
+inline	typographic	\mathbb{Z}/n\mathbb{Z}
+inline	typographic	\mathfrak{g} \oplus \mathfrak{h}
+inline	typographic	\mathcal{O}_X
+inline	engine	\mathscr{F}
+inline	typographic	\mathrm{Gal}(L/K)
+inline	engine	\mathbf{v} + \boldsymbol{\alpha}
+inline	engine	\mathsf{Set}
+inline	typographic	x = 1 \text{ if } x > 0
+inline	typographic	\operatorname{Syl}_r(G)
+inline	typographic	\operatorname{Hom}_R(M, N)
+inline	typographic	\ker \varphi \cap \operatorname{im} \psi
+inline	typographic	\deg f \le \dim V
+inline	engine	\varprojlim_n \mathbb{Z}/p^n
+inline	engine	\varinjlim_i M_i
+inline	engine	\operatorname*{colim}_i F(i)
+inline	engine	\mathrm{GL_n}(\mathbb{F}_q)
+display	engine	\operatorname*{colim}_{i \in I} F(i)
+inline	typographic	f \colon A \to B
+inline	typographic	x \mapsto x^2
+inline	typographic	A \hookrightarrow B \twoheadrightarrow C
+inline	engine	A \xrightarrow{\ f\ } B
+inline	engine	A \overset{\sim}{\to} B
+inline	typographic	P \Rightarrow Q \iff R
+inline	typographic	A \longrightarrow B
+inline	typographic	A \cong B \simeq C \sim D \approx E
+inline	typographic	a \not\equiv b,\ a \neq b
+inline	typographic	x \leq y \geqslant z
+inline	typographic	A \subseteq B \nsubseteq C \subsetneq D
+inline	typographic	N \trianglelefteq G,\ N \lhd G,\ N \unlhd G
+inline	typographic	\langle x, y \mid x^2 = y^3 = 1 \rangle
+inline	typographic	\lvert G \rvert,\ \lVert v \rVert
+inline	typographic	\lfloor x \rfloor + \lceil y \rceil
+inline	engine	\left\lvert \frac{a}{b} \right\rvert \le \tfrac12
+display	engine	\bigoplus_{i \in I} M_i
+inline	engine	\bigotimes_{k} V_k
+inline	engine	\bigcup_{n} A_n \cap \bigcap_n B_n
+inline	engine	\coprod_{i} X_i
+display	engine	\prod_{p} (1 - p^{-s})^{-1}
+inline	engine	\widehat{G},\ \widetilde{X},\ \overline{\mathbb{Q}}
+inline	engine	\bar{x},\ \hat{x},\ \vec{v},\ \dot{x}
+display	engine	\underbrace{a + \cdots + a}_{n}
+display	engine	\overbrace{1 + \cdots + 1}^{m}
+inline	typographic	\forall x\, \exists y\, \neg P
+inline	typographic	\Gamma \vdash \varphi,\ M \models T
+inline	typographic	\top, \bot, \varnothing, \emptyset
+inline	typographic	\ell, \partial, \nabla, \infty, \aleph_0
+inline	engine	\dots, \cdots, \ldots, \vdots, \ddots
+display	engine	f(x) = \begin{cases} 1 & x > 0 \\ 0 & \text{otherwise} \end{cases}
+display	engine	\begin{aligned} (p-1)(p+1) &= p^2 - 1 \\ &\equiv 0 \pmod{q} \end{aligned}
+display	engine	\begin{pmatrix} a & b \\ c & d \end{pmatrix}
+display	engine	\begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}
+display	engine	\begin{pmatrix} a_{11} & \cdots & a_{1n} \\ \vdots & \ddots & \vdots \\ a_{m1} & \cdots & a_{mn} \end{pmatrix}
+display	engine	\begin{array}{c|c} a & b \\ \hline c & d \end{array}
+display	source	\begin{CD} A @>f>> B \\ @VgVV @VVhV \\ C @>>k> D \end{CD}
+display	engine	\begin{gathered} x = 1 \\ y = 2 \end{gathered}
+inline	engine	\left(\begin{smallmatrix} a & b \\ c & d \end{smallmatrix}\right)
+inline	engine	a \stackrel{?}{=} b
+inline	engine	\boxed{x = 1}
+display	engine	\sum_{\substack{i < j \\ i, j \in I}} a_{ij}
+inline	engine	x \phantom{y} z \quad a \qquad b \, c \; d \! e
+inline	typographic	{}^{t}A
+inline	engine	\color{red}{x} + y
+inline	typographic	\Z/p\Z
+inline	typographic	\abs{G} = 12
+inline	typographic	\Syl{p}{G}
+inline	typographic	\Hom(M, N) \cong \Aut(G)
+inline	typographic	\set{x \mid x > 0}
+inline	typographic	p ≠ q
+inline	typographic	x ∈ G, q ∣ p + 1
+inline	engine	n₃ = 4

@@ -1,0 +1,390 @@
+{
+  "coverage" : [
+    {
+      "category" : "core",
+      "swiftMath" : "Invalid command \\pmod",
+      "swiftMathWithFallbacks" : "Invalid command \\pmod",
+      "tex" : "n_p \\in \\{1, q\\},\\ n_p \\equiv 1 \\pmod{p}"
+    },
+    {
+      "category" : "core",
+      "swiftMath" : "Invalid command \\nmid",
+      "swiftMathWithFallbacks" : "Invalid command \\nmid",
+      "tex" : "q \\mid p + 1,\\quad q \\nmid p - 1"
+    },
+    {
+      "category" : "core",
+      "tex" : "|G| = p^2 q"
+    },
+    {
+      "category" : "core",
+      "swiftMath" : "Invalid command \\tfrac",
+      "swiftMathWithFallbacks" : "Invalid command \\tfrac",
+      "tex" : "\\frac{a}{b} + \\tfrac{1}{2} + \\dfrac{x}{y}"
+    },
+    {
+      "category" : "core",
+      "tex" : "\\binom{n}{k}"
+    },
+    {
+      "category" : "core",
+      "tex" : "\\sum_{k=0}^{n} \\binom{n}{k} = 2^n"
+    },
+    {
+      "category" : "core",
+      "tex" : "\\int_0^1 f(x)\\,dx"
+    },
+    {
+      "category" : "core",
+      "tex" : "\\lim_{n \\to \\infty} a_n"
+    },
+    {
+      "category" : "core",
+      "tex" : "\\left( \\frac{p}{q} \\right)"
+    },
+    {
+      "category" : "core",
+      "tex" : "\\sqrt[3]{x} + \\sqrt{2}"
+    },
+    {
+      "category" : "core",
+      "swiftMath" : "Invalid command \\bmod",
+      "swiftMathWithFallbacks" : "Invalid command \\bmod",
+      "tex" : "a \\bmod n,\\ a \\equiv b \\pmod{n}"
+    },
+    {
+      "category" : "fonts",
+      "tex" : "\\mathbb{Z}\/n\\mathbb{Z}"
+    },
+    {
+      "category" : "fonts",
+      "tex" : "\\mathfrak{g} \\oplus \\mathfrak{h}"
+    },
+    {
+      "category" : "fonts",
+      "tex" : "\\mathcal{O}_X"
+    },
+    {
+      "category" : "fonts",
+      "swiftMath" : "Invalid command \\mathscr",
+      "swiftMathWithFallbacks" : "Invalid command \\mathscr",
+      "tex" : "\\mathscr{F}"
+    },
+    {
+      "category" : "fonts",
+      "tex" : "\\mathrm{Gal}(L\/K)"
+    },
+    {
+      "category" : "fonts",
+      "swiftMath" : "Invalid command \\boldsymbol",
+      "swiftMathWithFallbacks" : "Invalid command \\boldsymbol",
+      "tex" : "\\mathbf{v} + \\boldsymbol{\\alpha}"
+    },
+    {
+      "category" : "fonts",
+      "tex" : "\\mathsf{Set}"
+    },
+    {
+      "category" : "fonts",
+      "tex" : "x = 1 \\text{ if } x > 0"
+    },
+    {
+      "category" : "operators",
+      "swiftMath" : "Invalid command \\operatorname",
+      "tex" : "\\operatorname{Syl}_r(G)"
+    },
+    {
+      "category" : "operators",
+      "swiftMath" : "Invalid command \\operatorname",
+      "tex" : "\\operatorname{Hom}_R(M, N)"
+    },
+    {
+      "category" : "operators",
+      "swiftMath" : "Invalid command \\operatorname",
+      "tex" : "\\ker \\varphi \\cap \\operatorname{im} \\psi"
+    },
+    {
+      "category" : "operators",
+      "tex" : "\\deg f \\le \\dim V"
+    },
+    {
+      "category" : "operators",
+      "swiftMath" : "Invalid command \\varprojlim",
+      "swiftMathWithFallbacks" : "Invalid command \\varprojlim",
+      "tex" : "\\varprojlim_n \\mathbb{Z}\/p^n"
+    },
+    {
+      "category" : "operators",
+      "swiftMath" : "Invalid command \\varinjlim",
+      "swiftMathWithFallbacks" : "Invalid command \\varinjlim",
+      "tex" : "\\varinjlim_i M_i"
+    },
+    {
+      "category" : "operators",
+      "swiftMath" : "Invalid command \\operatorname",
+      "tex" : "\\operatorname*{colim}_{i \\in I} F(i)"
+    },
+    {
+      "category" : "arrows",
+      "tex" : "f \\colon A \\to B"
+    },
+    {
+      "category" : "arrows",
+      "tex" : "x \\mapsto x^2"
+    },
+    {
+      "category" : "arrows",
+      "swiftMath" : "Invalid command \\hookrightarrow",
+      "swiftMathWithFallbacks" : "Invalid command \\hookrightarrow",
+      "tex" : "A \\hookrightarrow B \\twoheadrightarrow C"
+    },
+    {
+      "category" : "arrows",
+      "swiftMath" : "Invalid command \\xrightarrow",
+      "swiftMathWithFallbacks" : "Invalid command \\xrightarrow",
+      "tex" : "A \\xrightarrow{\\ f\\ } B"
+    },
+    {
+      "category" : "arrows",
+      "swiftMath" : "Invalid command \\overset",
+      "swiftMathWithFallbacks" : "Invalid command \\overset",
+      "tex" : "A \\overset{\\sim}{\\to} B"
+    },
+    {
+      "category" : "arrows",
+      "tex" : "P \\Rightarrow Q \\iff R"
+    },
+    {
+      "category" : "arrows",
+      "tex" : "A \\longrightarrow B"
+    },
+    {
+      "category" : "relations",
+      "tex" : "A \\cong B \\simeq C \\sim D \\approx E"
+    },
+    {
+      "category" : "relations",
+      "swiftMath" : "Invalid command \\not",
+      "swiftMathWithFallbacks" : "Invalid command \\not",
+      "tex" : "a \\not\\equiv b,\\ a \\neq b"
+    },
+    {
+      "category" : "relations",
+      "swiftMath" : "Invalid command \\geqslant",
+      "swiftMathWithFallbacks" : "Invalid command \\geqslant",
+      "tex" : "x \\leq y \\geqslant z"
+    },
+    {
+      "category" : "relations",
+      "swiftMath" : "Invalid command \\nsubseteq",
+      "swiftMathWithFallbacks" : "Invalid command \\nsubseteq",
+      "tex" : "A \\subseteq B \\nsubseteq C \\subsetneq D"
+    },
+    {
+      "category" : "relations",
+      "swiftMath" : "Invalid command \\trianglelefteq",
+      "swiftMathWithFallbacks" : "Invalid command \\trianglelefteq",
+      "tex" : "N \\trianglelefteq G,\\ N \\lhd G,\\ N \\unlhd G"
+    },
+    {
+      "category" : "delimiters",
+      "tex" : "\\langle x, y \\mid x^2 = y^3 = 1 \\rangle"
+    },
+    {
+      "category" : "delimiters",
+      "swiftMath" : "Invalid command \\lvert",
+      "swiftMathWithFallbacks" : "Invalid command \\lvert",
+      "tex" : "\\lvert G \\rvert,\\ \\lVert v \\rVert"
+    },
+    {
+      "category" : "delimiters",
+      "tex" : "\\lfloor x \\rfloor + \\lceil y \\rceil"
+    },
+    {
+      "category" : "delimiters",
+      "swiftMath" : "Invalid delimiter for left: lvert",
+      "swiftMathWithFallbacks" : "Invalid delimiter for left: lvert",
+      "tex" : "\\left\\lvert \\frac{a}{b} \\right\\rvert \\le \\tfrac12"
+    },
+    {
+      "category" : "bigops",
+      "tex" : "\\bigoplus_{i \\in I} M_i"
+    },
+    {
+      "category" : "bigops",
+      "tex" : "\\bigotimes_{k} V_k"
+    },
+    {
+      "category" : "bigops",
+      "tex" : "\\bigcup_{n} A_n \\cap \\bigcap_n B_n"
+    },
+    {
+      "category" : "bigops",
+      "tex" : "\\coprod_{i} X_i"
+    },
+    {
+      "category" : "bigops",
+      "tex" : "\\prod_{p} (1 - p^{-s})^{-1}"
+    },
+    {
+      "category" : "accents",
+      "tex" : "\\widehat{G},\\ \\widetilde{X},\\ \\overline{\\mathbb{Q}}"
+    },
+    {
+      "category" : "accents",
+      "tex" : "\\bar{x},\\ \\hat{x},\\ \\vec{v},\\ \\dot{x}"
+    },
+    {
+      "category" : "accents",
+      "swiftMath" : "Invalid command \\underbrace",
+      "swiftMathWithFallbacks" : "Invalid command \\underbrace",
+      "tex" : "\\underbrace{a + \\cdots + a}_{n}"
+    },
+    {
+      "category" : "accents",
+      "swiftMath" : "Invalid command \\overbrace",
+      "swiftMathWithFallbacks" : "Invalid command \\overbrace",
+      "tex" : "\\overbrace{1 + \\cdots + 1}^{m}"
+    },
+    {
+      "category" : "symbols",
+      "tex" : "\\forall x\\, \\exists y\\, \\neg P"
+    },
+    {
+      "category" : "symbols",
+      "swiftMath" : "Invalid command \\vdash",
+      "swiftMathWithFallbacks" : "Invalid command \\vdash",
+      "tex" : "\\Gamma \\vdash \\varphi,\\ M \\models T"
+    },
+    {
+      "category" : "symbols",
+      "swiftMath" : "Invalid command \\varnothing",
+      "swiftMathWithFallbacks" : "Invalid command \\varnothing",
+      "tex" : "\\top, \\bot, \\varnothing, \\emptyset"
+    },
+    {
+      "category" : "symbols",
+      "tex" : "\\ell, \\partial, \\nabla, \\infty, \\aleph_0"
+    },
+    {
+      "category" : "symbols",
+      "swiftMath" : "Invalid command \\dots",
+      "swiftMathWithFallbacks" : "Invalid command \\dots",
+      "tex" : "\\dots, \\cdots, \\ldots, \\vdots, \\ddots"
+    },
+    {
+      "category" : "environments",
+      "tex" : "f(x) = \\begin{cases} 1 & x > 0 \\\\ 0 & \\text{otherwise} \\end{cases}"
+    },
+    {
+      "category" : "environments",
+      "swiftMath" : "Invalid command \\pmod",
+      "swiftMathWithFallbacks" : "Invalid command \\pmod",
+      "tex" : "\\begin{aligned} (p-1)(p+1) &= p^2 - 1 \\\\ &\\equiv 0 \\pmod{q} \\end{aligned}"
+    },
+    {
+      "category" : "environments",
+      "tex" : "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}"
+    },
+    {
+      "category" : "environments",
+      "tex" : "\\begin{bmatrix} 1 & 0 \\\\ 0 & 1 \\end{bmatrix}"
+    },
+    {
+      "category" : "environments",
+      "tex" : "\\begin{pmatrix} a_{11} & \\cdots & a_{1n} \\\\ \\vdots & \\ddots & \\vdots \\\\ a_{m1} & \\cdots & a_{mn} \\end{pmatrix}"
+    },
+    {
+      "category" : "environments",
+      "swiftMath" : "Invalid command \\hline",
+      "swiftMathWithFallbacks" : "Invalid command \\hline",
+      "tex" : "\\begin{array}{c|c} a & b \\\\ \\hline c & d \\end{array}"
+    },
+    {
+      "category" : "environments",
+      "swiftMath" : "Unknown environment CD",
+      "swiftMathWithFallbacks" : "Unknown environment CD",
+      "tex" : "\\begin{CD} A @>f>> B \\\\ @VgVV @VVhV \\\\ C @>>k> D \\end{CD}"
+    },
+    {
+      "category" : "environments",
+      "swiftMath" : "Unknown environment gathered",
+      "swiftMathWithFallbacks" : "Unknown environment gathered",
+      "tex" : "\\begin{gathered} x = 1 \\\\ y = 2 \\end{gathered}"
+    },
+    {
+      "category" : "environments",
+      "swiftMath" : "Unknown environment smallmatrix",
+      "swiftMathWithFallbacks" : "Unknown environment smallmatrix",
+      "tex" : "\\left(\\begin{smallmatrix} a & b \\\\ c & d \\end{smallmatrix}\\right)"
+    },
+    {
+      "category" : "misc",
+      "swiftMath" : "Invalid command \\stackrel",
+      "swiftMathWithFallbacks" : "Invalid command \\stackrel",
+      "tex" : "a \\stackrel{?}{=} b"
+    },
+    {
+      "category" : "misc",
+      "swiftMath" : "Invalid command \\boxed",
+      "swiftMathWithFallbacks" : "Invalid command \\boxed",
+      "tex" : "\\boxed{x = 1}"
+    },
+    {
+      "category" : "misc",
+      "swiftMath" : "Invalid command \\substack",
+      "swiftMathWithFallbacks" : "Invalid command \\substack",
+      "tex" : "\\sum_{\\substack{i < j \\\\ i, j \\in I}} a_{ij}"
+    },
+    {
+      "category" : "misc",
+      "swiftMath" : "Invalid command \\phantom",
+      "swiftMathWithFallbacks" : "Invalid command \\phantom",
+      "tex" : "x \\phantom{y} z \\quad a \\qquad b \\, c \\; d \\! e"
+    },
+    {
+      "category" : "misc",
+      "tex" : "{}^{t}A"
+    },
+    {
+      "category" : "misc",
+      "tex" : "\\color{red}{x} + y"
+    },
+    {
+      "category" : "macros",
+      "tex" : "\\Z\/p\\Z"
+    },
+    {
+      "category" : "macros",
+      "swiftMath" : "Invalid command \\lvert",
+      "swiftMathWithFallbacks" : "Invalid command \\lvert",
+      "tex" : "\\abs{G} = 12"
+    },
+    {
+      "category" : "macros",
+      "swiftMath" : "Invalid command \\operatorname",
+      "tex" : "\\Syl{p}{G}"
+    },
+    {
+      "category" : "macros",
+      "swiftMath" : "Invalid command \\operatorname",
+      "tex" : "\\Hom(M, N) \\cong \\Aut(G)"
+    },
+    {
+      "category" : "macros",
+      "tex" : "\\set{x \\mid x > 0}"
+    },
+    {
+      "category" : "unicode",
+      "tex" : "p ≠ q"
+    },
+    {
+      "category" : "unicode",
+      "tex" : "x ∈ G, q ∣ p + 1"
+    },
+    {
+      "category" : "unicode",
+      "tex" : "n₃ = 4"
+    }
+  ]
+}

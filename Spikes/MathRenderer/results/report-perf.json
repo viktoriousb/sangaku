@@ -1,0 +1,18 @@
+{
+  "perf" : {
+    "footprintMB" : 141.6261444091797,
+    "formulas" : 875,
+    "katexJSCMs" : 210.549458026886,
+    "perRowMaxLatencyMs" : 2249.3606667518616,
+    "perRowMedianLatencyMs" : 2189.975166797638,
+    "perRowViews" : 40,
+    "perRowWallMs" : 2286.9558749198914,
+    "perRowWebContentMB" : 1454.25,
+    "singlePageInPageMs" : 435,
+    "singlePageWallMs" : 692.0917081832886,
+    "singlePageWebContentMB" : 163.296875,
+    "swiftMathDrawMs" : 30.518625259399414,
+    "swiftMathTypesetMs" : 165.79158401489258,
+    "swiftUIAllRowsMs" : 156.55854177474976
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "raster" : {
+    "formulas" : 875,
+    "rasterizeMs" : 486.89637517929077,
+    "scroll" : {
+      "frames" : 136,
+      "hitches" : 0,
+      "maxMs" : 33.33329176530242,
+      "medianMs" : 33.33329176530242,
+      "nominalMs" : 33.33333320915699,
+      "p95Ms" : 33.33329176530242,
+      "p99Ms" : 33.33329176530242,
+      "workMaxMs" : 7.291416645050049,
+      "workMedianMs" : 4.238333225250244,
+      "workP95Ms" : 6.060291767120361,
+      "workP99Ms" : 6.8277082443237305
+    },
+    "snapshotScale" : 2,
+    "uniqueFormulas" : 30,
+    "webContentMB" : 75.140625
+  }
+}

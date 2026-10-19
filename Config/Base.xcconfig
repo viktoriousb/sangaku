@@ -1,0 +1,22 @@
+// Shared by every target and configuration of sangaku.
+// Machine-specific signing (your Team ID) goes in Local.xcconfig, which is gitignored; see Local.xcconfig.example.
+
+MACOSX_DEPLOYMENT_TARGET = 26.0
+SDKROOT = macosx
+
+SWIFT_VERSION = 6.0
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+SWIFT_UPCOMING_FEATURE_NONISOLATED_NONSENDING_BY_DEFAULT = YES
+SWIFT_STRICT_CONCURRENCY = complete
+
+ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES
+ENABLE_USER_SCRIPT_SANDBOXING = YES
+LOCALIZATION_PREFERS_STRING_CATALOGS = YES
+
+// Without a Team ID the app is signed to run locally; Local.xcconfig overrides both lines.
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

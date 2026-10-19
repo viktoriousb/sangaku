@@ -1,0 +1,18 @@
+{
+  "hybrid" : [
+    {
+      "engine" : "MicroTeX (XITS Math)",
+      "engineFormulas" : 125,
+      "failedFormulas" : 0,
+      "fastAllMs" : 16.628791332244873,
+      "fastFormulas" : 750
+    },
+    {
+      "engine" : "MathJax 4 (STIX Two) in JavaScriptCore",
+      "engineFormulas" : 125,
+      "failedFormulas" : 0,
+      "fastAllMs" : 284.94287490844727,
+      "fastFormulas" : 750
+    }
+  ]
+}

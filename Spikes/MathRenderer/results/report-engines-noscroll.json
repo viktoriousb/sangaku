@@ -1,0 +1,19 @@
+{
+  "engines" : [
+    {
+      "afterAllMB" : 220.17210388183594,
+      "covered" : 78,
+      "drawAllMs" : 36.623958110809326,
+      "failures" : {
+        "\\begin{CD} A @>f>> B \\\\ @VgVV @VVhV \\\\ C @>>k> D \\end{CD}" : "Unknown environment: CD"
+      },
+      "initMB" : 8.453125,
+      "initMs" : 10.544416904449463,
+      "layoutAllMs" : 21.001874923706055,
+      "name" : "MicroTeX (STIX Two Math)",
+      "proseFailures" : 0,
+      "proseFormulas" : 875,
+      "total" : 79
+    }
+  ]
+}

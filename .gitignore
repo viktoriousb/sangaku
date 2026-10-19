@@ -1,0 +1,16 @@
+.DS_Store
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+Spikes/*/.build/
+Spikes/*/.swiftpm/
+Config/Local.xcconfig
+*.xcworkspace/xcuserdata/
+# The renderer spike keeps its code, RESULTS.md and the results it cites. The engines' bundled files and the other
+# renders are left out; RESULTS.md says how to restore them.
+Spikes/MathRenderer/Sources/RendererSpike/Resources/katex/
+Spikes/MathRenderer/Sources/RendererSpike/Resources/mathjax/
+Spikes/MathRenderer/Sources/RendererSpike/Resources/microtex/*.clm2
+Spikes/MathRenderer/results/*.png
+!Spikes/MathRenderer/results/comparison.png
