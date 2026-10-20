@@ -38,18 +38,8 @@ struct ReviseSheet: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(ColorToken.refuted.color)
-                    .font(.callout)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Save Revision") { save() }
-                    .keyboardShortcut(.defaultAction)
-            }
+            SheetErrorLine(error: error)
+            SheetButtons(confirm: "Save Revision") { save() }
         }
         .padding(20)
         .frame(width: 540)
@@ -109,19 +99,9 @@ struct DismissSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(ColorToken.refuted.color)
-                    .font(.callout)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button(alsoCheck ? "Dismiss and Mark ✓" : "Dismiss") { save() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+            SheetErrorLine(error: error)
+            SheetButtons(confirm: alsoCheck ? "Dismiss and Mark ✓" : "Dismiss",
+                         disabled: reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { save() }
         }
         .padding(20)
         .frame(width: 460)

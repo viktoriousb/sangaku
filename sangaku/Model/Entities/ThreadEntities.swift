@@ -3,7 +3,8 @@ import SwiftData
 
 extension SangakuSchemaV1 {
     /// An approach to a problem. Dead ends keep the reason they died; `reasonForModels` is the exact text
-    /// sent to models when `includeReasonInContext` is on.
+    /// sent to models when `includeReasonInContext` is on. A fork reads its parent's messages up to `forkedFrom`
+    /// (`BranchHistory`); nothing is copied. Every text and state here is written by a person (`BranchManager`).
     @Model final class Branch {
         var stableID: UUID = UUID()
         var createdAt: Date = Date.now
@@ -13,7 +14,20 @@ extension SangakuSchemaV1 {
         var reasonForModels: String?
         var includeReasonInContext: Bool = false
         var problem: Problem?
+        /// Who last retired or reopened the branch, and when.
+        var stateChangedByID: UUID?
+        var stateChangedAt: Date?
+        /// Who wrote `reason`, when, and the message it was started from, if any.
+        var reasonByID: UUID?
+        var reasonAt: Date?
+        var reasonFromMessageID: UUID?
+        /// The same for `reasonForModels`.
+        var modelTextByID: UUID?
+        var modelTextAt: Date?
+        var modelTextFromMessageID: UUID?
 
+        /// The branch that owns `forkedFrom`, set with it. History follows `forkedFrom.branch`; this only shows that
+        /// the branch was forked, so a fork whose fork point is gone fails closed (`BranchHistory.Fault`).
         @Relationship(deleteRule: .nullify)
         var parent: Branch?
         @Relationship(deleteRule: .cascade, inverse: \Branch.parent)
@@ -33,17 +47,15 @@ extension SangakuSchemaV1 {
             set { stateRaw = newValue.rawValue }
         }
 
+        /// This branch's own messages, oldest first; a fork's inherited ones are in `visibleHistory`.
         var sortedMessages: [Message] {
-            (messages ?? []).sorted { $0.createdAt < $1.createdAt }
+            (messages ?? []).sorted { ($0.createdAt, $0.stableID.uuidString) < ($1.createdAt, $1.stableID.uuidString) }
         }
 
-        /// What models are told about this branch as a dead end: the text written for them, else the reason
-        /// written for people. The Branches view (Milestone 7) shows this same text.
+        /// What models are told about this branch as a dead end (`BranchReasons.textForModels`). The Branches panel
+        /// shows this same text.
         var textForModels: String {
-            for candidate in [reasonForModels, reason] {
-                if let text = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty { return text }
-            }
-            return "(no reason recorded)"
+            BranchReasons.textForModels(forModels: reasonForModels, forPeople: reason)
         }
     }
 

@@ -896,3 +896,188 @@ set of low ones and test gaps; all were fixed.
 
 Milestone 7, Branches: fork, dead ends with reasons in context, cherry-pick, and adopting an attempt as the main line
 (the referee's and Compare's Adopt).
+
+## 2026-10-19: Milestone 7, Branches
+
+### What was built
+
+- **The history rule** (`Model/Values/Branches/BranchHistory`).
+  - A fork reads its parent's history up to and including the message it was forked from, cut by position and
+    recursively, then its own messages. Nothing is copied.
+  - `Branch.visibleHistory` is the only way to read a branch's conversation. What models are sent, the thread, Review,
+    Compare, orphan recovery and the time floors all use it.
+  - A missing fork point or a cycle fails closed.
+  - Inherited messages are dropped first in a short window and listed as before the fork.
+- **`BranchManager`.**
+  - Fork (refused while the message or one before it streams; one-line unique names).
+  - Mark as dead end, park, reopen, edit reasons and the In Context toggle, all with provenance and only by a person.
+  - Adopt, with an assessment of warnings that must be acknowledged.
+  - The cherry-pick target for Promote.
+  - `StatementGraph.adoptProof` sets the theorem's source steps.
+- **Closed branches.** `ContextBuilder` refuses every request on a dead end or parked branch (alignments excepted) and
+  on an unreadable history. The composer shows why, with Reopen, and keeps the draft.
+- **The thread.**
+  - A branch header: name, standing, where a fork came from, Show in Branches.
+  - A "forked here" divider.
+  - A fan-out cut by a fork shows only its visible attempts and offers no referee.
+  - "New Branch from Here…" on every message, card and referee message, in the menu and for VoiceOver.
+  - One "Adopt A as Main Line…" per attempt on the referee message.
+- **Compare.** Adopt in the resolve panel waits while blind and names the attempts once shown.
+- **The sidebar.** Branch rows switch the window's branch and offer Open Messages, Show in Branches, New Branch,
+  Reopen, Edit Reasons, Mark as Dead End, Park and Cherry-pick, each disabled when refused.
+- **The Branches screen** (⌘4).
+  - The tree on its side, with rails, or as an outline.
+  - The selected node's panel: for a branch, its reasons and provenance, the exact line sent with In Context, and its
+    actions; for an attempt, its standing and Adopt; for a lemma, where it was salvaged from.
+  - What every new prompt carries.
+  - New Branch, Show Dead Ends, J and K, rotors and a Branches menu.
+- **Sheets**, opened from any screen through one host: New Branch, the reasons sheet (start from a message), Adopt
+  (effect, progress, warnings, refusal) and Promote for cherry-picking.
+- **Styles.** The main line is ◆ with a neutral fill and running is ● in ink; nothing about a branch uses a status
+  colour.
+- **Also.**
+  - The inspector's placed layout and edge drawing are shared components.
+  - One J/K helper serves Compare and Branches.
+  - `Prose.count` takes an irregular plural.
+- **Fixture.**
+  - Branches at fixed times.
+  - You and A on Class equation, with its reason edited from A's reply.
+  - B's attempt on Induction on |G|.
+  - MK's note on the parked branch.
+  - A fork, "Parity argument", from A's attempt inside the fan-out.
+  - A's adoption recorded.
+  - `makeSalvaged()` adds Lem 8, salvaged from the Induction attempt.
+
+### Decisions
+
+Recorded in `docs/DECISIONS.md` (2026-10-19, Milestone 7). The existing store opened with the new schema without a
+reset.
+
+**Spec drift to reconcile** (not edited):
+- The `Branch` row of the domain model: the provenance fields, and the states now live, dead end and parked, with
+  "adopted" and "running" derived.
+- The Sidebar's "✓ main" is "◆ main line".
+- "Adopted filled" is the main line's neutral fill.
+- `Problem`'s adoption record.
+
+### Tests
+
+501 tests in 90 suites, all passing. Milestone 7 added 51, 12 of them after the review:
+- **The history rule:**
+  - chains, a fork from an inherited message, faults, ties;
+  - 200 random forests against a naive rule;
+  - for every fixture branch, the thread, Review's attempts and the model's conversation are one history;
+  - the fork inside the fan-out (B and the referee hidden, a referee refused);
+  - invariant 4 across a fork;
+  - invariant 5 (inherited messages dropped first, listed as before the fork);
+  - closed branches and a lost fork point refused.
+- **`BranchManager`:**
+  - forks copy nothing;
+  - fork refusals change nothing;
+  - dead ends in context by default; parked and reopened never sent;
+  - the retiring rules;
+  - provenance only from people;
+  - adopting sets proof, record and main line;
+  - adopting B (a gap) leaves the theorem sketched, writing no review, verdict, revision or blind verdict;
+  - adopting on a closed branch refused, then the main line moves;
+  - A's warnings;
+  - cherry-picking;
+  - no deletion (counts, and a scan of the sources).
+- **Requests:**
+  - send, question and referee refused on dead and parked branches, keeping the draft;
+  - a referee on the cut fan-out refused;
+  - a fork's messages after its history whatever the clock;
+  - the review floor over a fork's request;
+  - orphans through a fork;
+  - the prompt summary equal to the sent lines.
+- **Screen:**
+  - the tree's shape;
+  - hiding dead ends;
+  - the example's tree;
+  - placement (no overlap, inside the width at 260 points and depth 12, rails, patterns);
+  - invariant 3 for every branch style;
+  - wording;
+  - Compare's Adopt while blind;
+  - menu offers agreeing with the manager;
+  - window switching;
+  - layout at the narrowest workspace and at a window of the minimum size, laid out wide both ways;
+  - smoke renders of the tree (light and dark), the outline, three panels, the summary, three sheets and the thread
+    header.
+- **After the review:**
+  - every action the menus offer against the manager, on every example branch, running or not;
+  - blind mode: the offers, the tree, the intent handler and the sheet host refuse sheets that name authors;
+  - captions against frames (A's out-of-date verdict, B's gap, a partial adopted proof);
+  - the intent handler's effects, and nothing done for a branch that is gone;
+  - adoption warnings: partial, unknown basis, several at once, and acknowledging them through the manager;
+  - forking from A while B streams, then sending: the fork never sees B and the parent never sees the fork;
+  - a referee on a fork that shows every attempt, whose "complete" adopts nothing;
+  - an unreadable history through send, keeping the draft; the provider policy on a fork;
+  - the edge strokes of both graphs; the Branches menu's handle; a fan-out seen from a fork at its prompt;
+  - Review from the inspector switching to the branch a lemma's steps were written on;
+  - the no-deletion scan made strict: it fails if it reads nothing, matches any case, and must find the known
+    deletions.
+
+### Checked in the running app
+
+Launched with `-SangakuFixture YES -SangakuStartView branches`: the tree with the main line, A (adopted, sketched), the
+fork under it, B, the two dead ends and the parked branch, the main line's panel with the adoption record and its
+refusals in words, and the prompt summary.
+
+The first launch hung and then aborted. The tree held its measured width as its minimum, so AppKit's column could not
+shrink and the constraint pass looped. The tree and panel are flexible now; a test lays the content out wide and
+offers it no space, and it fails without the fix.
+
+After the review's fixes, launched again the same way: the tree with A's caption "referee: complete, but steps 3 and
+5 changed since", the J/K legend, and the main line's panel drawing the shared action items with Mark as Dead End and
+Park disabled and why. The renders show the dead end's and an attempt's panels, the summary with each lemma's sent
+line, and the sheets.
+
+Not tried by hand: the sheets, forking and adopting from the thread, Compare's Adopt, the sidebar menu, the keys and
+the Branches menu.
+
+### Review
+
+Three reviewers (trust invariants, correctness, conventions) found one high-severity issue, nine medium and a set of
+low ones and test gaps; all were fixed.
+- **High.** Blind mode (invariant 9): the sidebar's branch menu opened New Branch, the reasons sheet and Cherry-pick,
+  which name authors, while Compare hid them. The intent handler now refuses them while blind mode holds, the offers
+  say why, and the sheet host withholds one asked for earlier.
+- **Medium.**
+  - The intent handler read the problem of the render that made it; it now resolves every ID through the manager.
+  - Captions said "referee: complete" for a verdict on earlier text, more than the frame showed.
+  - Review from the inspector could not reach an attempt on another branch.
+  - The Branches screen did not scroll to the selected node.
+  - Branch actions were listed separately in four places; one set of items now serves all of them.
+  - Running was in the style but never drawn.
+  - Previews were missing for the sheets, the panels, the summary, the tree and outline and the thread header; a
+    salvaged-fixture preview trait was added.
+  - VoiceOver read branch names with math as LaTeX source.
+  - Every sheet repeated its error line and buttons; `SheetErrorLine` and `SheetButtons` serve all eight.
+- **Low.**
+  - The prompt summary takes the graph the screen already read and no branch.
+  - A J/K legend; the layout mode moved to the model values; one typing check for every list.
+  - The Adopt label, help and "main line's proof" wording in one place, used by the thread, Compare and Branches.
+  - The adopted proof's partial state shown on the problem and the main line.
+  - The summary lists each lemma's sent line, as for dead ends and refuted claims.
+  - The reasons sheet's query named for what it holds, its editor labelled "Note for people" when parking, and branch
+    names drawn as math in the sheets.
+  - The composer's Reopen goes through the handler and is announced; context chips and a duplicate refusal are hidden
+    on a closed branch.
+  - A fan-out seen from a fork at its prompt says it has no attempts on the branch, not "0 independent attempts".
+  - One reset of Review's and Compare's selections; the edge layering shared by both graphs; Compare's own J/K mover
+    removed; the fork menu moved to the thread's views; a queried history keeps only the branch's own messages.
+  - Stale doc comments corrected, and a plainer subtitle.
+- **Found while testing.** New Branch was offered on a running branch, whose latest message the manager refuses to
+  fork from; it is now refused with the same reason.
+
+### Deferred
+
+- The partial-attempt progress wording (from Milestone 5), to Milestone 8.
+- Trying the sheets, forking and adopting from the thread, Compare's Adopt, the sidebar menu, the keys, scrolling to
+  the selected node and the Branches menu by hand.
+- The spec drift listed under Decisions, until `CLAUDE.md` is reconciled.
+
+### Next
+
+Milestone 8, Verification and export: `ToolRunner`'s sandbox, the shared Lean workspace, the axiom check and fidelity
+review, the GAP sweep, the citation check, LaTeX, Kerodon and Lean export, and the AI-use statement.

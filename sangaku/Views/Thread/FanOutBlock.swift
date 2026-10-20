@@ -61,8 +61,15 @@ struct FanOutBlock: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .statusFrame(CompareRowStyle.style(for: .diverge), cornerRadius: 8)
             }
-            RefereeControl(fanOut: fanOut, problem: problem, branch: branch, running: run != nil,
-                           refereed: refereeGaveVerdicts != nil, busy: busy, notice: notice)
+            // On a fork made inside the fan-out, its later attempts are not on this branch: a referee here would
+            // judge only some of them, so it is not offered (and a request would be refused, invariant 4).
+            let hidden = (fanOut.attempts ?? []).count - attempts.count
+            if hidden > 0 {
+                NoteChip(text: BranchWording.hiddenAttempts(hidden), systemImage: "arrow.triangle.branch")
+            } else {
+                RefereeControl(fanOut: fanOut, problem: problem, branch: branch, running: run != nil,
+                               refereed: refereeGaveVerdicts != nil, busy: busy, notice: notice)
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(header.title)

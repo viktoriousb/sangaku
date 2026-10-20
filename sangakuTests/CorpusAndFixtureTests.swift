@@ -90,7 +90,8 @@ struct FixtureTests {
         #expect(fixture.attemptB.sortedSteps.count == 5)
         let inputs = StatusInputs.make(for: fixture.theorem, people: fixture.state.problems.personIDs())
         #expect(inputs.sourceSteps.filter { $0.checkedOnCurrentRevision && !$0.hasOpenObjection }.count == 4)
-        #expect(fixture.problem.sortedBranches.map(\.state) == [.live, .deadEnd, .deadEnd, .parked])
+        #expect(fixture.problem.sortedBranches.map(\.state) == [.live, .deadEnd, .deadEnd, .parked, .live])
+        #expect(fixture.problem.mainBranch === fixture.mainBranch && fixture.problem.adoptedAttemptID == fixture.attemptA.stableID)
     }
 
     @Test("Invariant 8: the example's review reads 4 of 6, with step 5's objection open and step 6 checked by C only")
@@ -238,6 +239,8 @@ struct FixtureTests {
             + fixture.problem.sortedNotation.flatMap { ["$\($0.symbolLaTeX)$", $0.meaning] }
             + [fixture.question, fixture.reply, fixture.interruptedReply, fixture.refereeMessage].map(\.bodyLaTeX)
             + (fixture.fanOut.verdicts ?? []).map(\.rationale)
+            + fixture.inductionAttempt.sortedSteps.map(\.textLaTeX)
+            + fixture.problem.sortedBranches.flatMap { [$0.name, $0.reason ?? ""] + $0.sortedMessages.map(\.bodyLaTeX) }
         for text in texts {
             let composed = MathTextComposer.compose(text, renderer: renderer, context: context)
             #expect(composed.problems.isEmpty, "\(text): \(composed.problems.map(\.message))")
@@ -349,7 +352,7 @@ struct PreviewSmokeTests {
                 .environment(\.colorScheme, scheme)
             }
         }
-        window.openReview(statement: try #require(graph[fixture.lemmas[2].stableID]))
+        window.openReview(statement: try #require(graph[fixture.lemmas[2].stableID]), in: fixture.problem)
         #expect(window.activeView == .review && window.review.highlightedStatementID == fixture.lemmas[2].stableID)
         try render("review-highlight", width: 640) {
             ReviewView(problem: fixture.problem, window: window).frame(height: 400)

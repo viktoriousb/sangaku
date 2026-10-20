@@ -30,7 +30,7 @@ struct SidebarView: View {
             }
             if let id = window.selectedProblemID {
                 ProblemScope(id: id) { problem in
-                    BranchSection(problem: problem)
+                    BranchSection(problem: problem, window: window)
                     NotationSection(problem: problem)
                 }
             }
@@ -69,15 +69,31 @@ private struct ProblemRow: View {
     }
 }
 
-/// The problem's branches with their state glyphs. Read-only until Milestone 7.
+/// The problem's branches with their state glyphs. Clicking one shows it in Thread, Review and Compare. The rows are
+/// buttons, never tagged: the list's selection is the problem.
 private struct BranchSection: View {
     let problem: Problem
+    let window: WindowState
+
+    @Environment(\.threadManager) private var threads
+    @Environment(\.branchManager) private var branches
+    @Environment(\.problemManager) private var problems
 
     var body: some View {
+        // Read once, not in every row.
         let mainID = problem.mainBranchID
+        let shown = window.selectedBranch(in: problem)?.stableID
+        let streaming = threads?.streamingBranchIDs ?? []
+        let live = threads?.liveMessageIDs ?? []
+        let math = problems?.mathContext(for: problem, fontSize: 13) ?? MathContext(fontSize: 13)
         Section("Branches") {
             ForEach(problem.sortedBranches) { branch in
-                BranchRow(branch: branch, isMain: branch.stableID == mainID)
+                BranchRow(branch: branch, isMain: branch.stableID == mainID, isShown: branch.stableID == shown,
+                          offers: BranchOffers(branch, mainBranchID: mainID, streaming: streaming, live: live,
+                                               hidesAuthors: window.hidesModelChrome)) { intent in
+                    BranchIntentHandler.perform(intent, window: window, branches: branches)
+                }
+                .environment(\.mathContext, math)
             }
         }
     }
@@ -86,28 +102,56 @@ private struct BranchSection: View {
 private struct BranchRow: View {
     let branch: Branch
     let isMain: Bool
+    let isShown: Bool
+    let offers: BranchOffers
+    let perform: (BranchIntent) -> Void
+
+    @Environment(\.mathRenderer) private var renderer
+    @Environment(\.mathContext) private var math
 
     var body: some View {
-        let style = StatusStyle.style(for: branch.state)
-        HStack(spacing: 6) {
-            Text(verbatim: isMain ? "✓" : style.glyph)
-                .foregroundStyle(isMain ? ColorToken.verified.color : style.ink.color)
-                .frame(width: 14)
-            Text(branch.name)
-                .foregroundStyle(style.ink.color)
-            Spacer(minLength: 4)
-            Text(isMain ? "main" : style.label.lowercased())
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        let style = StatusStyle.style(forBranch: branch.state, isMain: isMain)
+        let standing = BranchWording.standing(branch.state, isMain: isMain, isRunning: offers.isRunning)
+        let spoken = MathTextComposer.spoken(branch.name, renderer: renderer, context: math)
+        Button { perform(.show(branchID: branch.stableID)) } label: {
+            HStack(spacing: 6) {
+                Text(verbatim: style.glyph)
+                    .foregroundStyle(style.glyphToken.color)
+                    .frame(width: 14)
+                MathText(branch.name, showsProblems: false)
+                    .foregroundStyle(style.ink.color)
+                    .fontWeight(isShown ? .semibold : .regular)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if offers.isRunning {
+                    Text(verbatim: StatusStyle.running.glyph)
+                        .font(.caption2)
+                }
+                Text(standing)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(.rect)
         }
-        .help(branch.reason ?? style.label)
+        .buttonStyle(.plain)
+        .help(isShown ? "Shown in this window · \(standing)" : "Show this branch · \(standing)")
         .contextMenu {
+            Button("Open Messages") { perform(.openMessages(branchID: branch.stableID)) }
+            Button("Show in Branches") { perform(.showInBranches(branch.stableID)) }
+            Divider()
+            BranchActionItems(branchID: branch.stableID, offers: offers, perform: perform)
+            if offers.hidesAuthors {
+                // A menu item cannot explain why it is disabled; this line does.
+                Text(BranchError.blind.message)
+            }
+            Divider()
             Button("Copy Branch Name") {
                 Pasteboard.copy(branch.name)
             }
-            Button("Reopen Branch") {}.disabled(true).help("Branch actions arrive in Milestone 7")
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(branch.name), \(isMain ? "main line" : style.label)"))
+        .accessibilityLabel(Text("\(spoken), \(standing)"))
+        .accessibilityAddTraits(isShown ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityAction(named: "Show in Branches") { perform(.showInBranches(branch.stableID)) }
     }
 }

@@ -17,9 +17,24 @@ nonisolated enum StatementKind: String, StoredEnum {
     static let fallback = StatementKind.claim
 }
 
+/// A branch's lifecycle, set by people only. Whether it is the main line (`Problem.mainBranchID`) and whether a
+/// request runs on it (`ThreadManager.streamingBranchIDs`) are derived, never stored: the values "adopted" and
+/// "running" of earlier versions read as `live`.
 nonisolated enum BranchState: String, StoredEnum {
-    case live, adopted, running, deadEnd, parked
+    case live, deadEnd, parked
     static let fallback = BranchState.live
+
+    /// Retired: a dead end or parked. Nothing more is sent on it until it is reopened.
+    var isClosed: Bool { self != .live }
+
+    /// What follows "this branch is": "live", "a dead end", "parked".
+    var phrase: String {
+        switch self {
+        case .live: "live"
+        case .deadEnd: "a dead end"
+        case .parked: "parked"
+        }
+    }
 }
 
 /// `reply` is a model's prose answer in the conversation; `attempt` is a structured attempt in a fan-out.

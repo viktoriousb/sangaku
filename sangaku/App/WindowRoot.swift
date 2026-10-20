@@ -138,12 +138,12 @@ private struct WorkspaceContent: View {
             case .review:
                 ReviewView(problem: problem, window: window)
             case .branches:
-                PlaceholderView(title: "Branches", systemImage: "arrow.triangle.branch",
-                                detail: "The branch map arrives in Milestone 7.")
+                BranchesView(problem: problem, window: window)
             }
         }
         .sheet(isPresented: $window.isEditingProblem) {
             ProblemEditor(problem: problem)
         }
+        .branchSheets(problem: problem, window: window)
     }
 }

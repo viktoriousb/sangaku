@@ -34,10 +34,13 @@ nonisolated struct FanOutHeader: Hashable, Sendable {
     init(visibility: FanOutVisibility, attempts: [Attempt], refereeLetter: String?, referee: RefereeState) {
         let count = attempts.count
         let kind = visibility == .independent ? "independent" : "shared"
-        title = "\(count) \(kind) attempt\(count == 1 ? "" : "s") · " + Self.progress(attempts)
+        // A fork made at the prompt shows the fan-out with none of its attempts: they are on the parent branch.
+        title = count == 0 ? "No attempts on this branch"
+            : "\(count) \(kind) attempt\(count == 1 ? "" : "s") · " + Self.progress(attempts)
         let letters = attempts.map(\.letter)
         visibilityLine = switch (visibility, count) {
-        case (_, 0), (_, 1): "One attempt"
+        case (_, 0): (visibility == .independent ? "Independent" : "Shared") + " attempts, on the parent branch"
+        case (_, 1): "One attempt"
         case (.independent, _): "Independent: \(Prose.list(letters)) can't see each other"
         case (.shared, _): "Shared: each sees the attempts before it (\(letters.joined(separator: ", then ")))"
         }

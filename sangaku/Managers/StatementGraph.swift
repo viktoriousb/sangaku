@@ -64,6 +64,21 @@ final class StatementGraph {
         return statement
     }
 
+    // MARK: The theorem's proof
+
+    /// Makes an attempt's steps the pinned theorem's proof, as the person using the app (`BranchManager.adopt`). Only
+    /// the theorem's source steps change: not its wording, its uses, its reviews or its Lean results. Its status then
+    /// derives from those steps like any statement's, so adopting checks nothing (invariants 1 and 13).
+    func adoptProof(attemptID: UUID, in problem: Problem) throws(StatementError) {
+        guard let attempt = attempt(attemptID) else { throw .noSuchSteps }
+        guard attempt.message?.branch?.problem?.stableID == problem.stableID else { throw .notInThisProblem }
+        let steps = attempt.sortedSteps
+        guard !steps.isEmpty else { throw .noSuchSteps }
+        let theorem = problems.ensurePinnedTheorem(for: problem)
+        theorem.sourceSteps = steps
+        changed(problem)
+    }
+
     // MARK: Dependencies
 
     /// "`user` uses `dependency`". Refused if it would close a cycle; nothing happens if the edge exists.
@@ -139,9 +154,7 @@ final class StatementGraph {
     }
 
     private func attempt(_ id: UUID) -> ProofAttempt? {
-        var descriptor = FetchDescriptor<ProofAttempt>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        context.first(ProofAttempt.self, stableID: id)
     }
 
     private func validLabel(_ label: String, among others: [String]) throws(StatementError) -> String {

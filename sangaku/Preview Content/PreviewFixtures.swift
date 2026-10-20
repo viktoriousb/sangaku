@@ -41,6 +41,16 @@ enum PreviewFixtures {
         /// A and B compared by C at 11:16, after steps 3 and 5 were revised: rows 1–4 equivalent, row 5 diverging,
         /// step 6 only in A. Which of A and B is "Attempt 1" follows their IDs (`SideOrder`).
         let alignment: Alignment
+        /// A dead end explored with A (its reason written by You from A's reply), a dead end where B made an
+        /// attempt, a parked branch with MK's note, and a fork from A's attempt made inside the fan-out, so B's attempt
+        /// and the referee's pass are not part of it. A is adopted: its steps are Theorem 1's proof.
+        let classEquation: Branch
+        let deadEndReply: Message
+        let induction: Branch
+        let inductionAttempt: ProofAttempt
+        let parked: Branch
+        let fork: Branch
+        let forkReply: Message
 
         var mathContext: MathContext { state.problems.mathContext(for: problem) }
 
@@ -119,19 +129,22 @@ enum PreviewFixtures {
             _ = try? manager.addConvention(to: problem, symbolLaTeX: symbol, meaning: meaning, macroDefinition: macro)
         }
 
-        // Branches
+        // Branches, at fixed times so they always sort main first. Their messages are written while they are live;
+        // they are retired at the end, as a person would.
         let main = problem.sortedBranches[0]
         main.name = "Counting elements"
-        let classEquation = Branch(name: "Class equation", state: .deadEnd)
+        main.createdAt = Date(timeIntervalSinceReferenceDate: 800_000_000 - 7_200)
+        let classEquation = Branch(name: "Class equation")
         classEquation.reason = #"The class equation constrains centralizer sizes, not $n_q$. Without control of $Z(G)$ the case split never closed, and every route fell back on the Sylow counts anyway."#
         classEquation.reasonForModels = "Tried: class equation alone. Stalls on |Z(G)|. Don't retry without new input on the center."
-        classEquation.includeReasonInContext = true
-        let induction = Branch(name: "Induction on |G|", state: .deadEnd)
+        let induction = Branch(name: "Induction on |G|")
         induction.reason = "Passing to a quotient loses the order p²q shape, so the induction hypothesis never applies."
         induction.reasonForModels = "Tried: induction on |G|. Quotients leave the p²q family."
-        induction.includeReasonInContext = true
-        let complement = Branch(name: "Normal p-complement", state: .parked)
+        let complement = Branch(name: "Normal p-complement")
         complement.reason = "Burnside's transfer theorem gives a normal p-complement when a Sylow p-subgroup is central in its normalizer. That hypothesis doesn't hold in general here. MK: revisit for p²q²."
+        for (offset, branch) in [classEquation, induction, complement].enumerated() {
+            branch.createdAt = Date(timeIntervalSinceReferenceDate: 800_000_000 + 950 + Double(offset) * 10)
+        }
         problem.branches = (problem.branches ?? []) + [classEquation, induction, complement]
 
         // The fan-out: You ask A and B, independently; C referees.
@@ -328,6 +341,57 @@ enum PreviewFixtures {
         failedReply.request?.errorMessage = overloaded.message
         failedReply.request?.estimatedCost = 0
 
+        // The side branches. On Class equation, You and A tried the class equation.
+        let (_, deadEndReply) = exchange(
+            state: state, problem: problem, branch: classEquation, you: byYou, slot: slotA, at: 800_000_000 + 1_000,
+            prompt: #"Try the class equation: can $|Z(G)|$ decide which Sylow subgroup is normal?"#,
+            reply: #"Writing $|G| = |Z(G)| + \sum [G : C_G(x)]$ bounds the centralizers, not $n_q$. Without more on $Z(G)$ the cases do not close, and each route falls back on the Sylow counts."#)
+        // On Induction on |G|, B made an attempt; its step 2 is the one worth salvaging (`makeSalvaged`).
+        let inductionPrompt = Message(author: byYou, bodyLaTeX: #"@B try induction on $|G|$: pass to $G/N$ for a normal subgroup $N$."#, kind: .prompt)
+        inductionPrompt.createdAt = Date(timeIntervalSinceReferenceDate: 800_000_000 + 1_090)
+        let inductionAttempt = attempt(author: byB, at: 1_100, steps: [
+            (#"If $G$ has a normal subgroup $N$ with $1 < |N| < |G|$, then $|G/N|$ divides $p^2 q$."#, "Quotient order", .routine),
+            (#"If neither Sylow subgroup of $G$ is normal, then $n_p = q \equiv 1 \pmod{p}$, so $q > p$."#, "q > p", .standard),
+            (#"But $|G/N|$ need not have the form $p^2 q$, so the induction hypothesis does not apply to $G/N$."#, "Induction stalls", .guess),
+        ])
+        let inductionMessage = Message(author: byB, kind: .attempt)
+        inductionMessage.proofAttempt = inductionAttempt
+        inductionMessage.createdAt = Date(timeIntervalSinceReferenceDate: 800_000_000 + 1_100)
+        inductionMessage.derivedFromIDs = [inductionPrompt.stableID]
+        induction.messages = [inductionPrompt, inductionMessage]
+        // A fork from A's attempt, made inside the fan-out: it reads the prompt and A's attempt, never B's.
+        let fork = Branch(name: "Parity argument")
+        fork.createdAt = Date(timeIntervalSinceReferenceDate: 800_000_000 + 1_190)
+        problem.branches = (problem.branches ?? []) + [fork]
+        fork.forkedFrom = messageA
+        fork.parent = main
+        let (_, forkReply) = exchange(
+            state: state, problem: problem, branch: fork, you: byYou, slot: slotA, at: 800_000_000 + 1_200,
+            prompt: #"Expand step 5: why must the primes be $2$ and $3$?"#,
+            reply: #"If $q = p + 1$ and both are prime, one of them is even, hence equal to $2$. Since $q > p \geq 2$, $p = 2$ and $q = 3$."#)
+
+        // Retired, with who wrote each reason and which message it was edited from.
+        let retiredAt = day(11, 1)
+        for (branch, state, writer) in [(classEquation, BranchState.deadEnd, you), (induction, .deadEnd, you),
+                                        (complement, .parked, mk)] {
+            branch.state = state
+            branch.includeReasonInContext = state == .deadEnd
+            branch.stateChangedByID = writer.stableID
+            branch.stateChangedAt = retiredAt
+            branch.reasonByID = writer.stableID
+            branch.reasonAt = retiredAt
+            if branch.reasonForModels != nil {
+                branch.modelTextByID = writer.stableID
+                branch.modelTextAt = retiredAt
+            }
+        }
+        classEquation.reasonFromMessageID = deadEndReply.stableID
+
+        // A was adopted as the main line: its steps are the theorem's proof (set above).
+        problem.adoptedAttemptID = attemptA.stableID
+        problem.adoptedByID = you.stableID
+        problem.adoptedAt = day(11, 20)
+
         try? context.save()
         return Handles(state: state, problem: problem, you: you, mk: mk, slotA: slotA, slotB: slotB, slotC: slotC,
                        attemptA: attemptA, attemptB: attemptB, theorem: theorem,
@@ -335,7 +399,22 @@ enum PreviewFixtures {
                        cappedLemma: lemma5, onRefutedClaim: lemma6, belowRefuted: lemma7,
                        mainBranch: main, question: plainQuestion, reply: reply, interruptedReply: interruptedReply,
                        failedReply: failedReply, fanOutPrompt: prompt, fanOut: fanOut, messageA: messageA,
-                       messageB: messageB, refereeMessage: refereeMessage, alignment: alignment)
+                       messageB: messageB, refereeMessage: refereeMessage, alignment: alignment,
+                       classEquation: classEquation, deadEndReply: deadEndReply, induction: induction,
+                       inductionAttempt: inductionAttempt, parked: complement, fork: fork, forkReply: forkReply)
+    }
+
+    /// The example with a lemma salvaged from a dead end: step 2 of B's attempt on Induction on |G| ("q > p"),
+    /// promoted by You as Lem 8.
+    static func makeSalvaged() -> Handles {
+        let fixture = make()
+        let attempt = fixture.inductionAttempt
+        let texts = Dictionary(uniqueKeysWithValues: attempt.sortedSteps.map { ($0.index, $0.textLaTeX) })
+        var draft = PromotionDraft(attemptID: attempt.stableID, first: 2, last: 2,
+                                   existingLabels: (fixture.problem.statements ?? []).map(\.label), texts: texts)
+        draft.editText(#"If neither Sylow subgroup is normal, then $q > p$."#)
+        _ = try? fixture.state.graph.promote(draft, in: fixture.problem)
+        return fixture
     }
 
     /// A question from You and A's reply, with the request record `ContextBuilder` gives for it.
@@ -506,14 +585,31 @@ struct FixturePreview: PreviewModifier {
     }
 
     func body(content: Content, context: PreviewFixtures.Handles) -> some View {
-        content
-            .appEnvironment(context.state)
-            .environment(\.mathContext, context.mathContext)
-            .modelContainer(context.state.container)
+        content.fixtureEnvironment(context)
+    }
+}
+
+/// The same with a lemma salvaged from a dead end (`PreviewFixtures.makeSalvaged`).
+struct SalvagedFixturePreview: PreviewModifier {
+    static func makeSharedContext() async throws -> PreviewFixtures.Handles {
+        PreviewFixtures.makeSalvaged()
+    }
+
+    func body(content: Content, context: PreviewFixtures.Handles) -> some View {
+        content.fixtureEnvironment(context)
+    }
+}
+
+private extension View {
+    func fixtureEnvironment(_ fixture: PreviewFixtures.Handles) -> some View {
+        appEnvironment(fixture.state)
+            .environment(\.mathContext, fixture.mathContext)
+            .modelContainer(fixture.state.container)
     }
 }
 
 extension PreviewTrait where T == Preview.ViewTraits {
     static var fixture: Self { .modifier(FixturePreview()) }
+    static var salvagedFixture: Self { .modifier(SalvagedFixturePreview()) }
 }
 #endif

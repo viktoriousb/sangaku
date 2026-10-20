@@ -13,6 +13,7 @@ final class AppState {
     let alignments: AlignmentService
     let credentials: CredentialManager
     let threads: ThreadManager
+    let branches: BranchManager
 
     private var observers: [NSObjectProtocol] = []
 
@@ -62,6 +63,8 @@ final class AppState {
             context: container.mainContext, saves: saves, problems: problems, credentials: credentials,
             registry: ProviderRegistry([AnthropicProvider(transport: httpTransport, secrets: secretStore)]))
         problems.willDelete = { [threads] problemID in threads.cancelAll(problemID: problemID) }
+        branches = BranchManager(context: container.mainContext, saves: saves, problems: problems, statements: graph,
+                                 activity: threads)
 
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [saves] _ in
@@ -118,6 +121,7 @@ extension View {
             .environment(\.statementGraph, state.graph)
             .environment(\.reviewManager, state.reviews)
             .environment(\.alignmentService, state.alignments)
+            .environment(\.branchManager, state.branches)
             .environment(\.credentialManager, state.credentials)
     }
 }

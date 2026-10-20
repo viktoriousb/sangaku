@@ -19,6 +19,8 @@ final class ThreadManager {
     /// Live requests by message stable ID, queued ones included. Changes only when a request starts or ends,
     /// never per token.
     private(set) var live: [UUID: MessageStream] = [:]
+    /// The messages still being written, queued ones included.
+    var liveMessageIDs: Set<UUID> { Set(live.keys) }
     private(set) var streamingBranchIDs: Set<UUID> = []
     /// Fan-outs still running or waiting for their referee, by fan-out stable ID.
     private(set) var runs: [UUID: FanOutRun] = [:]
@@ -143,9 +145,12 @@ final class ThreadManager {
         }
     }
 
+    /// A send on a branch: its time comes after everything the branch shows, inherited messages included, so the
+    /// new messages always follow its history.
     private func sendRequest(problem: Problem, branch: Branch, draft: ComposerDraft) -> SendRequest {
-        SendRequest(snapshot: snapshot(problem: problem, branch: branch), selection: draft.selection, text: draft.text,
-                    effort: draft.effort, busy: streamingBranchIDs.contains(branch.stableID), now: now())
+        SendRequest(snapshot: snapshot(problem: problem, branch: branch), selection: draft.selection,
+                    text: draft.text, effort: draft.effort, busy: streamingBranchIDs.contains(branch.stableID),
+                    now: Timestamps.after(branch.visibleHistory.latestDate, now: now()))
     }
 
     private func environment(for problem: Problem) -> PlannerEnvironment {
@@ -329,8 +334,8 @@ final class ThreadManager {
                               partial: prepared.built.partialAttemptIDs.contains(id), hasContent: hasText && !declined)
         }
         let message = Message(author: .model(slot.id), kind: .referee)
-        let last = branch.sortedMessages.last?.createdAt ?? .distantPast
-        message.createdAt = max(now(), last.addingTimeInterval(0.001))
+        let last = branch.visibleHistory.latestDate
+        message.createdAt = Timestamps.after(last, now: now())
         message.derivedFromIDs = (fanOut.requestMessageID.map { [$0] } ?? []) + fanOut.attemptMessageIDs
         let record = RequestRecord()
         record.createdAt = message.createdAt
@@ -355,10 +360,10 @@ final class ThreadManager {
         guard running.isEmpty else { throw .context(.attemptsUnfinished(running)) }
         let snapshot = snapshot(problem: problem, branch: branch)
         guard let slot = snapshot.slots.first(where: { $0.id.rawValue == slotID }) else { throw .slotMissing }
-        let last = branch.sortedMessages.last?.createdAt ?? .distantPast
+        let last = branch.visibleHistory.latestDate
         let ready = try SendPlanner.readyQuestion(
             text, to: slot, about: attemptMessageIDs, snapshot: snapshot, effort: effort,
-            busy: streamingBranchIDs.contains(branch.stableID), now: max(now(), last.addingTimeInterval(0.001)),
+            busy: streamingBranchIDs.contains(branch.stableID), now: Timestamps.after(last, now: now()),
             env: environment(for: problem))
         commit(ready, problem: problem, branch: branch)
         begin(ready, problemID: problem.stableID, branchID: branch.stableID)
@@ -500,11 +505,11 @@ final class ThreadManager {
         }
     }
 
-    /// Requests that never ended (the app quit or crashed mid-stream) become interrupted, and say so: the branch's
-    /// messages, and the alignment requests of its problem.
+    /// Requests that never ended (the app quit or crashed mid-stream) become interrupted, and say so: the messages
+    /// the branch shows, inherited ones included, and the alignment requests of its problem.
     func reconcileOrphans(in branch: Branch) {
         var changed = false
-        for message in branch.messages ?? [] where active[message.stableID] == nil {
+        for message in branch.visibleHistory.all where active[message.stableID] == nil {
             guard let record = message.request, record.finishedAt == nil else { continue }
             record.finishedAt = now()
             record.stopReason = LocalStopReason.orphaned.rawValue
@@ -755,7 +760,7 @@ final class ThreadManager {
         _ = problems.me()
         let people = (try? context.fetch(FetchDescriptor<Person>())) ?? []
         return ProblemSnapshot.make(problem: problem, branch: branch, notation: problems.notation(for: problem),
-                                    people: people, liveMessageIDs: Set(live.keys))
+                                    people: people, liveMessageIDs: liveMessageIDs)
     }
 
     /// From the last ten requests to this model that reported their usage.
@@ -773,26 +778,18 @@ final class ThreadManager {
     }
 
     private func fetchRecord(_ id: UUID) -> RequestRecord? {
-        var descriptor = FetchDescriptor<RequestRecord>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        context.first(RequestRecord.self, stableID: id)
     }
 
     private func attempt(_ id: UUID) -> ProofAttempt? {
-        var descriptor = FetchDescriptor<ProofAttempt>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        context.first(ProofAttempt.self, stableID: id)
     }
 
     private func fetchMessage(_ id: UUID) -> Message? {
-        var descriptor = FetchDescriptor<Message>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        context.first(Message.self, stableID: id)
     }
 
     private func fetchFanOut(_ id: UUID) -> FanOut? {
-        var descriptor = FetchDescriptor<FanOut>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        context.first(FanOut.self, stableID: id)
     }
 }

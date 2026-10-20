@@ -12,6 +12,8 @@ struct RefereeMessageRow: View {
     let onViewContext: (RequestRecord) -> Void
     let onStop: () -> Void
 
+    @Environment(\.branchActions) private var branchActions
+
     var body: some View {
         let outcome = message.outcome(isStreaming: stream != nil)
         let attempts = (fanOut?.attempts ?? []).compactMap(\.message).sorted { $0.createdAt < $1.createdAt }
@@ -62,9 +64,11 @@ struct RefereeMessageRow: View {
             if let record = message.request {
                 Button("View Context…") { onViewContext(record) }
             }
+            ForkMenuItem(message: message, running: stream != nil)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Referee message from \(authors.name(of: message.author))")
+        .forkAction(message: message, running: stream != nil, actions: branchActions)
     }
 
     /// The verdicts this message gave.
@@ -119,7 +123,8 @@ private struct RefereeVerdicts: View {
                     }
                 }
             }
-            RefereeActions(attempts: attempts)
+            RefereeActions(attempts: attempts, authors: authors,
+                           adoptedAttemptID: message.branch?.problem?.adoptedAttemptID)
         }
     }
 
@@ -129,24 +134,39 @@ private struct RefereeVerdicts: View {
     }
 }
 
-/// What a person can do with a referee's verdicts. Promoting and reviewing work now; adopting arrives with a later
-/// milestone and says which, in words a keyboard user sees too (a disabled button takes no focus, so its tooltip
-/// alone would be missed).
+/// What a person can do with a referee's verdicts: adopt one attempt as the main line (the Adopt sheet says what that
+/// does and does not do first), promote steps, review, compare. Adopting is never automatic: a verdict of
+/// "complete" adopts nothing (invariant 1).
 private struct RefereeActions: View {
     let attempts: [Message]
+    let authors: AuthorDirectory
+    let adoptedAttemptID: UUID?
 
     @Environment(\.promoteSteps) private var promote
     @Environment(\.openReview) private var openReview
     @Environment(\.openCompare) private var openCompare
+    @Environment(\.branchActions) private var branchActions
 
     var body: some View {
-        // Only attempts that were read as steps can be promoted from or reviewed.
-        let promotable = attempts.compactMap(\.proofAttempt).filter { !($0.steps ?? []).isEmpty }.map(\.stableID)
+        // Only attempts that were read as steps can be adopted, promoted from or reviewed.
+        let readable = attempts.filter { !($0.proofAttempt?.steps ?? []).isEmpty }
+        let promotable = readable.compactMap(\.proofAttempt).map(\.stableID)
         VStack(alignment: .leading, spacing: 4) {
             FlowLayout(spacing: 8, lineSpacing: 6) {
-                Button("Adopt as Main Line") {}
-                    .disabled(true)
-                    .help("Adopting an attempt arrives with Milestone 7 (Branches)")
+                ForEach(readable, id: \.stableID) { attempt in
+                    if let id = attempt.proofAttempt?.stableID {
+                        let letter = authors.shortName(of: attempt.author)
+                        if id == adoptedAttemptID {
+                            Label(BranchWording.isMainProof(letter), systemImage: "diamond.fill")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button(BranchWording.adoptTitle(letter)) { branchActions?(.adopt(attemptID: id)) }
+                                .disabled(branchActions == nil)
+                                .help(BranchWording.adoptHelp)
+                        }
+                    }
+                }
                 Button("Promote Step to Lemma…") { promote?(PromotionTarget(attemptIDs: promotable)) }
                     .disabled(promote == nil || promotable.isEmpty)
                     .help(promotable.isEmpty ? "No attempt was read as steps" : "Choose steps of an attempt and make them a lemma")
@@ -157,9 +177,6 @@ private struct RefereeActions: View {
                     .disabled(openCompare == nil || promotable.count < 2)
                     .help(promotable.count < 2 ? "Comparing needs two attempts read as steps" : "Set these attempts side by side, step by step")
             }
-            Text("Adopting an attempt as the main line arrives with Milestone 7.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }

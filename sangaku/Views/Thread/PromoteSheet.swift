@@ -35,19 +35,8 @@ struct PromoteSheet: View {
             } else {
                 Text(StatementError.noSuchSteps.message).foregroundStyle(.secondary)
             }
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(ColorToken.refuted.color)
-                    .font(.callout)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Promote") { promote() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(draft == nil)
-            }
+            SheetErrorLine(error: error)
+            SheetButtons(confirm: "Promote", disabled: draft == nil) { promote() }
         }
         .padding(20)
         .frame(width: 560)

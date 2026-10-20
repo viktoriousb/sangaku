@@ -39,8 +39,10 @@ private struct CompareBranch: View {
 
     var body: some View {
         let live = threads?.live ?? [:]
-        let options = AttemptOption.make(messages: messages, live: Set(live.keys))
-        let attempts = Dictionary(messages.compactMap { message in message.proofAttempt.map { ($0.stableID, $0) } },
+        // A fork compares the attempts it inherited as well as its own.
+        let visible = branch.visibleHistory(own: messages).all
+        let options = AttemptOption.make(messages: visible, live: threads?.liveMessageIDs ?? [])
+        let attempts = Dictionary(visible.compactMap { message in message.proofAttempt.map { ($0.stableID, $0) } },
                                   uniquingKeysWith: { first, _ in first })
         if let chosen = ComparePairChoice.resolve(window.compare, among: options),
            let x = attempts[chosen.0], let y = attempts[chosen.1],

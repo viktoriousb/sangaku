@@ -59,6 +59,8 @@ nonisolated struct ProblemSnapshot: Hashable, Sendable {
         var fanOutID: UUID?
         /// For a referee message: the verdicts it gave, in attempt order.
         var verdicts: [VerdictDigest] = []
+        /// Read from the parent's history up to the fork point (`BranchHistory`).
+        var inherited = false
     }
 
     nonisolated struct FanOutDigest: Hashable, Sendable, Identifiable {
@@ -80,7 +82,11 @@ nonisolated struct ProblemSnapshot: Hashable, Sendable {
     var refutedClaims: [StatementDigest] = []
     var deadEnds: [DeadEndDigest] = []
     var branchID: UUID
-    /// The branch's messages, oldest first.
+    /// Nothing is sent on a dead end or parked branch until it is reopened.
+    var branchState: BranchState = .live
+    /// Set when a fork's earlier history cannot be read: nothing is sent then.
+    var historyFault: BranchHistory.Fault?
+    /// The branch's visible history (`BranchHistory`): inherited messages, then its own, oldest first.
     var messages: [MessageDigest] = []
     var fanOuts: [FanOutDigest] = []
     var slots: [SlotDigest] = []
@@ -100,31 +106,27 @@ extension ProblemSnapshot.SlotDigest {
     }
 }
 
+extension ProblemSnapshot.DeadEndDigest {
+    /// A dead end exactly as models are told it.
+    init(_ branch: Branch) {
+        self.init(id: branch.stableID, createdAt: branch.createdAt, name: branch.name, text: branch.textForModels)
+    }
+}
+
 extension ProblemSnapshot {
-    /// Reads a problem and one of its branches. `liveMessageIDs` are replies still streaming: they are never
-    /// context. `people` decides who counts as a person (invariant 1: only a person accepts a refutation).
+    /// Reads a problem and one of its branches. The conversation is the branch's visible history
+    /// (`Branch.visibleHistory`), the same one every screen shows. `liveMessageIDs` are replies still streaming:
+    /// they are never context. `people` decides who counts as a person (invariant 1: only a person accepts a
+    /// refutation).
     static func make(problem: Problem, branch: Branch, notation: NotationRegistry, people: [Person],
                      liveMessageIDs: Set<UUID>) -> ProblemSnapshot {
-        let personIDs = Set(people.map(\.stableID))
-        var snapshot = ProblemSnapshot(
-            problemID: problem.stableID, title: problem.title, statementLaTeX: problem.statementLaTeX,
-            allowedProviderIDs: problem.allowedProviderIDs, notation: notation, branchID: branch.stableID)
-
-        let graph = StatementGraphState.read(problem: problem, people: personIDs)
-        snapshot.adoptedLemmas = graph.adoptedLemmas.map {
-            StatementDigest(id: $0.id, createdAt: $0.createdAt, label: $0.label, statementLaTeX: $0.statementLaTeX,
-                            note: $0.contextNote)
-        }
-        snapshot.refutedClaims = graph.refutedClaims.map {
-            StatementDigest(id: $0.id, createdAt: $0.createdAt, label: $0.label, statementLaTeX: $0.statementLaTeX,
-                            note: $0.refutationNote)
-        }
-
-        snapshot.deadEnds = problem.sortedBranches
-            .filter { $0.state == .deadEnd && $0.includeReasonInContext }
-            .map { DeadEndDigest(id: $0.stableID, createdAt: $0.createdAt, name: $0.name, text: $0.textForModels) }
-
-        let messages = branch.sortedMessages
+        var snapshot = stable(problem: problem, notation: notation, people: people)
+        snapshot.branchID = branch.stableID
+        snapshot.branchState = branch.state
+        let history = branch.visibleHistory
+        snapshot.historyFault = history.fault
+        let inherited = history.inheritedIDs
+        let messages = history.all
         let letters = Dictionary(problem.sortedModelSlots.map { ($0.stableID, $0.letter) }, uniquingKeysWith: { first, _ in first })
         var verdictsByMessage: [UUID: [VerdictDigest]] = [:]
         for message in messages {
@@ -148,15 +150,44 @@ extension ProblemSnapshot {
                 outcome: message.outcome(isStreaming: liveMessageIDs.contains(message.stableID)),
                 derivedFromIDs: message.derivedFromIDs,
                 fanOutID: message.proofAttempt?.fanOut?.stableID,
-                verdicts: (verdictsByMessage[message.stableID] ?? []).sorted { $0.attemptLetter < $1.attemptLetter })
+                verdicts: (verdictsByMessage[message.stableID] ?? []).sorted { $0.attemptLetter < $1.attemptLetter },
+                inherited: inherited.contains(message.stableID))
         }
         snapshot.fanOuts = messages.compactMap { message in
             guard let fanOut = message.fanOut else { return nil }
-            // A to-many relationship has no order: attempts are taken in the order they were written.
+            // A to-many relationship has no order: attempts are taken in the order they were written. A fork inside a
+            // fan-out still lists every attempt, so a referee there is refused rather than judging only some.
             let attempts = (fanOut.attempts ?? []).compactMap(\.message).sorted { $0.createdAt < $1.createdAt }
             return FanOutDigest(id: fanOut.stableID, visibility: fanOut.visibility, requestMessageID: message.stableID,
                                 attemptMessageIDs: attempts.map(\.stableID), refereeSlotID: fanOut.refereeSlotID)
         }
+        return snapshot
+    }
+
+    /// What every prompt on the problem carries whatever the branch: the problem, notation, adopted lemmas, dead
+    /// ends and refuted claims, with the slots and people. No conversation and no branch: `branchID` is the problem's
+    /// until `make` sets it. The Branches summary reads this, so it shows what is sent (`PromptCarries`); it passes the
+    /// statement graph it already read.
+    static func stable(problem: Problem, notation: NotationRegistry, people: [Person],
+                       graph: StatementGraphState? = nil) -> ProblemSnapshot {
+        let personIDs = Set(people.map(\.stableID))
+        var snapshot = ProblemSnapshot(
+            problemID: problem.stableID, title: problem.title, statementLaTeX: problem.statementLaTeX,
+            allowedProviderIDs: problem.allowedProviderIDs, notation: notation, branchID: problem.stableID)
+
+        let graph = graph ?? StatementGraphState.read(problem: problem, people: personIDs)
+        snapshot.adoptedLemmas = graph.adoptedLemmas.map {
+            StatementDigest(id: $0.id, createdAt: $0.createdAt, label: $0.label, statementLaTeX: $0.statementLaTeX,
+                            note: $0.contextNote)
+        }
+        snapshot.refutedClaims = graph.refutedClaims.map {
+            StatementDigest(id: $0.id, createdAt: $0.createdAt, label: $0.label, statementLaTeX: $0.statementLaTeX,
+                            note: $0.refutationNote)
+        }
+
+        snapshot.deadEnds = problem.sortedBranches
+            .filter { $0.state == .deadEnd && $0.includeReasonInContext }
+            .map(DeadEndDigest.init)
         snapshot.slots = problem.sortedModelSlots.map {
             SlotDigest(id: $0.slotID, letter: $0.letter, providerID: $0.providerID, modelID: $0.modelID, role: $0.role)
         }

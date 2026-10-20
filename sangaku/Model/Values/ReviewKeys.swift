@@ -7,8 +7,8 @@ nonisolated enum ReviewCommand: Hashable, Sendable {
     case comment
 }
 
-/// A key press as a keyboard-driven list (Review's steps, Compare's rows) sees it. Caps lock and the numeric keypad
-/// are deliberately not modifiers here.
+/// A key press as a keyboard-driven list (Review's steps, Compare's rows, the Branches tree) sees it. Caps lock and
+/// the numeric keypad are deliberately not modifiers here.
 nonisolated struct ListKeyInput: Hashable, Sendable {
     var characters: String
     var command = false
@@ -58,5 +58,20 @@ nonisolated enum ListNavigation {
         guard !order.isEmpty else { return nil }
         guard let position = current.flatMap(order.firstIndex(of:)) else { return forward ? order.first : order.last }
         return order[forward ? min(position + 1, order.count - 1) : max(position - 1, 0)]
+    }
+}
+
+/// J and K in a list of items (Compare's rows, the Branches tree): the next or previous item, never while typing or
+/// with a modifier. A held key repeats.
+nonisolated enum ListKeys {
+    static let characters = CharacterSet(charactersIn: "jkJK")
+
+    static func move<ID: Equatable>(_ input: ListKeyInput, isTyping: Bool, from current: ID?, in order: [ID]) -> ID? {
+        guard !isTyping, !input.command, !input.option, !input.control, !input.shift else { return nil }
+        switch input.characters.lowercased() {
+        case "j": return ListNavigation.move(forward: true, from: current, in: order)
+        case "k": return ListNavigation.move(forward: false, from: current, in: order)
+        default: return nil
+        }
     }
 }

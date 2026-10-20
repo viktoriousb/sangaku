@@ -35,6 +35,7 @@ struct CompareScreen: View {
 
     @Environment(\.alignmentService) private var alignments
     @Environment(\.threadManager) private var threads
+    @Environment(\.branchActions) private var branchActions
     @FocusState private var listFocused: Bool
     @State private var position = ScrollPosition(idType: RowKey.self)
     @State private var width: CGFloat = 0
@@ -107,7 +108,7 @@ struct CompareScreen: View {
                 .focusable()
                 .focused($listFocused)
                 .focusEffectDisabled()
-                .onKeyPress(characters: CompareKeys.characters, phases: [.down, .repeat]) { press in
+                .onKeyPress(characters: ListKeys.characters, phases: [.down, .repeat]) { press in
                     move(press, rows: rows, current: current)
                 }
                 .accessibilityElement(children: .contain)
@@ -126,7 +127,11 @@ struct CompareScreen: View {
                     .foregroundStyle(.secondary)
                 ResolvePanel(row: rows.first { $0.id == current } ?? ThreadAgreement.firstDivergence(state.rows),
                              identity: identity, run: run, notice: notice?.row == nil ? notice : nil,
-                             onHolds: { record($0, in: state.pair) }, onAsk: { sheet = .question($0) })
+                             adoption: branchActions == nil ? .none
+                                 : CompareAdoption.offer(identity: identity, pair: state.pair,
+                                                         adopted: problem.adoptedAttemptID),
+                             onHolds: { record($0, in: state.pair) }, onAsk: { sheet = .question($0) },
+                             onAdopt: { branchActions?(.adopt(attemptID: $0)) })
             }
             .padding(Self.padding)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.width - 2 * Self.padding }, action: { width = $0 })
@@ -161,9 +166,8 @@ struct CompareScreen: View {
     }
 
     private func move(_ press: KeyPress, rows: [CompareRow], current: RowKey?) -> KeyPress.Result {
-        let typing = !listFocused || TextEditingProbe.isTyping(firstResponder: NSApp.keyWindow?.firstResponder)
-        guard let next = CompareKeys.move(ListKeyInput(press), isTyping: typing, from: current,
-                                          in: rows.map(\.id)) else { return .ignored }
+        guard let next = ListKeys.move(ListKeyInput(press), isTyping: TextEditingProbe.typing(listHasFocus: listFocused),
+                                       from: current, in: rows.map(\.id)) else { return .ignored }
         window.focusCompare(row: next)
         return .handled
     }

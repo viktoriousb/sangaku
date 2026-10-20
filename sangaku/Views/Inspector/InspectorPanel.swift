@@ -98,7 +98,7 @@ private struct ProofStructure: View {
                                     onSelect: { window.selectedNodeID = $0 },
                                     onEdit: { editing = node },
                                     onDelete: { deleting = node },
-                                    onReview: { window.openReview(statement: node) })
+                                    onReview: { window.openReview(statement: node, in: problem) })
                 } else {
                     Text("Select a statement to see what it uses and what holds its status down.")
                         .font(.caption)

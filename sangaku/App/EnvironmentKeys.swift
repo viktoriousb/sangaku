@@ -12,6 +12,7 @@ extension EnvironmentValues {
     @Entry var statementGraph: StatementGraph? = nil
     @Entry var reviewManager: ReviewManager? = nil
     @Entry var alignmentService: AlignmentService? = nil
+    @Entry var branchManager: BranchManager? = nil
     /// Opens the promote sheet for steps of finished attempts. Unset where steps cannot be promoted.
     @Entry var promoteSteps: PromoteStepsAction? = nil
     /// Opens Review on an attempt or a step. Unset where Review cannot be opened.
@@ -22,6 +23,8 @@ extension EnvironmentValues {
     @Entry var compareActions: CompareActions? = nil
     /// Review's handler for its rows.
     @Entry var reviewActions: ReviewActions? = nil
+    /// The window's handler of branch intents (`BranchSheetHost`). Unset where branches cannot be changed.
+    @Entry var branchActions: BranchActions? = nil
     @Entry var credentialManager: CredentialManager? = nil
     /// Overrides the system's accessibility display settings (previews and tests).
     @Entry var statusAccessibilityOverride: StatusAccessibility? = nil
@@ -34,6 +37,8 @@ extension FocusedValues {
     @Entry var reviewControl: ReviewControl? = nil
     /// The key window's Compare, for the Compare menu.
     @Entry var compareControl: CompareControl? = nil
+    /// The key window's Branches screen, for the Branches menu.
+    @Entry var branchesControl: BranchesControl? = nil
 }
 
 /// An action a view hands down through the environment. Compared by the view that presents it, not by the closure,
@@ -58,3 +63,5 @@ typealias ReviewActions = PresentedAction<ReviewIntent>
 typealias OpenCompareAction = PresentedAction<CompareTarget>
 /// Compare's handler for its rows.
 typealias CompareActions = PresentedAction<CompareIntent>
+/// The window's handler of branch intents.
+typealias BranchActions = PresentedAction<BranchIntent>

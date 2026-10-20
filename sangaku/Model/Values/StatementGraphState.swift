@@ -19,6 +19,8 @@ nonisolated struct StatementNode: Hashable, Sendable, Identifiable {
     nonisolated struct Source: Hashable, Sendable {
         var stepID: UUID
         var attemptID: UUID?
+        /// The branch the attempt was written on.
+        var branchID: UUID? = nil
         /// Who wrote the attempt the step belongs to.
         var attemptAuthor: Author?
         var attemptCreatedAt: Date?
@@ -240,6 +242,7 @@ extension StatementGraphState {
             let sources = (statement.sourceSteps ?? [])
                 .map { step in
                     StatementNode.Source(stepID: step.stableID, attemptID: step.attempt?.stableID,
+                                         branchID: step.attempt?.message?.branch?.stableID,
                                          attemptAuthor: step.attempt?.message?.author,
                                          attemptCreatedAt: step.attempt?.message?.createdAt,
                                          index: step.index, confidence: step.confidence)

@@ -69,9 +69,22 @@ extension StatusInputs {
                                axioms: result.axioms, fidelityConfirmed: latest?.verdict == .matches)
         }
 
-        // Rules 3 and 4 read the same per-step standing as the Review screen, so they cannot drift apart.
-        let steps = statement.sourceSteps ?? []
-        let standings = StepStandings.standings(of: steps, people: people)
+        let steps = make(sourceSteps: statement.sourceSteps ?? [], people: people)
+        inputs.sourceSteps = steps.sourceSteps
+        inputs.refereePassed = steps.refereePassed
+        return inputs
+    }
+
+    /// Rules 3 to 5 for a run of steps: what a statement resting on exactly these steps earns. The Branches tree
+    /// judges an attempt this way, so it and the theorem it might become cannot disagree. Rules 3 and 4 read the same
+    /// per-step standing as the Review screen.
+    static func make(sourceSteps steps: [Step], people: Set<UUID>) -> StatusInputs {
+        make(steps: steps, standings: StepStandings.standings(of: steps, people: people))
+    }
+
+    /// The same, from standings already derived.
+    static func make(steps: [Step], standings: [UUID: StepStanding]) -> StatusInputs {
+        var inputs = StatusInputs()
         inputs.sourceSteps = steps.map { SourceStep(standings[$0.stableID]) }
         inputs.refereePassed = !steps.isEmpty && steps.allSatisfy { standings[$0.stableID]?.model.passes == true }
         return inputs

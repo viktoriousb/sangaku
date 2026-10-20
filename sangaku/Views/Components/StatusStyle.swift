@@ -25,6 +25,8 @@ nonisolated struct StatusStyle: Hashable, Sendable {
     var isProvisional: Bool
     /// The label where room is short (a node of the statement graph); empty for styles that are never that small.
     var shortLabel = ""
+    /// How strongly `fill` is laid on: a neutral tint (the main line) is the ink colour at low opacity.
+    var fillOpacity = 1.0
 
     /// The glyph's colour: the border's, except that unchecked grey is too faint for a glyph.
     var glyphToken: ColorToken { borderToken == .unchecked ? .secondaryInk : borderToken }
@@ -72,17 +74,13 @@ nonisolated struct StatusStyle: Hashable, Sendable {
         }
     }
 
+    /// A branch's lifecycle. Being the main line or running is not a lifecycle state: see `style(forBranch:isMain:)`
+    /// and `running`.
     static func style(for state: BranchState) -> StatusStyle {
         switch state {
-        case .adopted:
-            StatusStyle(border: .solid, borderToken: .verified, fill: .verifiedFill, ink: .ink,
-                        glyph: "✓", label: "Adopted", isProvisional: false)
         case .live:
             StatusStyle(border: .solid, borderToken: .ink, fill: nil, ink: .ink,
                         glyph: "○", label: "Live", isProvisional: false)
-        case .running:
-            StatusStyle(border: .solid, borderToken: .modelChecked, fill: nil, ink: .ink,
-                        glyph: "●", label: "Running", isProvisional: false)
         case .deadEnd:
             StatusStyle(border: .dashed, borderToken: .unchecked, fill: nil, ink: .secondaryInk,
                         glyph: "×", label: "Dead end", isProvisional: false)
@@ -90,6 +88,20 @@ nonisolated struct StatusStyle: Hashable, Sendable {
             StatusStyle(border: .dotted, borderToken: .unchecked, fill: nil, ink: .secondaryInk,
                         glyph: "‖", label: "Parked", isProvisional: false)
         }
+    }
+
+    /// The main line: filled, but in a neutral ink tint and with its own glyph, never a status colour or ✓, so an
+    /// adopted proof that nobody has checked never looks checked (invariant 3).
+    static let mainLine = StatusStyle(border: .solid, borderToken: .ink, fill: .ink, ink: .ink, glyph: "◆",
+                                      label: "Main line", isProvisional: false, fillOpacity: 0.08)
+
+    /// A request is running on the branch. In ink: blue means checked by a model.
+    static let running = StatusStyle(border: .solid, borderToken: .ink, fill: nil, ink: .ink, glyph: "●",
+                                     label: "Running", isProvisional: false)
+
+    /// A branch's frame: the main line when it is main and live, else its lifecycle.
+    static func style(forBranch state: BranchState, isMain: Bool) -> StatusStyle {
+        isMain && state == .live ? mainLine : style(for: state)
     }
 }
 

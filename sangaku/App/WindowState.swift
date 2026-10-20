@@ -45,6 +45,13 @@ final class WindowState {
     var compareRow: RowKey?
     /// All rows or differences only. Kept across comparisons, and apart from them, so filtering re-derives nothing.
     var compareFilter: CompareFilter = .all
+    /// The Branches screen's selected node (a branch, attempt or lemma by stable ID): it fills that screen's panel
+    /// only, and never changes the branch the window shows.
+    var branchesSelection: UUID?
+    /// Whether the Branches screen shows dead ends. Kept across problems, like `compareFilter`.
+    var showsDeadEnds = true
+    /// The branch sheet open in this window, from whichever screen asked for it (`BranchSheetHost`).
+    var branchSheet: BranchSheet?
 
     /// While blind mode is on in Compare, the toolbar's model chips and the proof-structure inspector are hidden:
     /// both name the models (invariant 9). Kept hidden after a verdict reveals one comparison, failing closed, until
@@ -56,16 +63,43 @@ final class WindowState {
         selectedProblemID = problem?.stableID
         selectedBranchID = problem?.mainBranchID
         selectedNodeID = nil
+        resetSelections()
+        branchesSelection = nil
+        branchSheet = nil
+    }
+
+    /// Review's and Compare's selections start over: they name attempts of the problem and branch shown.
+    private func resetSelections() {
         review = ReviewSelection()
         reviewStepID = nil
         compare = CompareSelection()
         compareRow = nil
     }
 
-    /// The branch shown: the one selected, else the problem's main line.
+    /// The branch shown: the one selected, else the problem's main line. A selection that names no branch any more
+    /// falls back to the main line.
     func selectedBranch(in problem: Problem) -> Branch? {
         let id = selectedBranchID ?? problem.mainBranchID
-        return problem.sortedBranches.first { $0.stableID == id }
+        return problem.sortedBranches.first { $0.stableID == id } ?? problem.mainBranch
+    }
+
+    /// Shows another branch in Thread, Review and Compare. Their selections start over, as for a new problem.
+    func switchBranch(to id: UUID) {
+        guard selectedBranchID != id else { return }
+        selectedBranchID = id
+        resetSelections()
+    }
+
+    /// Shows a branch's messages in the thread.
+    func openMessages(of id: UUID) {
+        switchBranch(to: id)
+        activeView = .thread
+    }
+
+    /// Shows a branch, attempt or lemma on the Branches screen.
+    func showInBranches(_ id: UUID) {
+        branchesSelection = id
+        activeView = .branches
     }
 
     /// Creates a problem, shows it in the thread and opens its editor. The one path for New Problem.
@@ -95,9 +129,13 @@ final class WindowState {
     }
 
     /// Opens Review on a statement's source steps: the attempt of the first, at that step, with the statement's
-    /// steps marked.
-    func openReview(statement node: StatementNode) {
+    /// steps marked. When the branch shown does not hold that attempt, the window shows the branch it was written on.
+    func openReview(statement node: StatementNode, in problem: Problem) {
         guard let first = node.sources.first else { return }
+        if let attemptID = first.attemptID, let branchID = first.branchID,
+           selectedBranch(in: problem)?.visibleHistory.all.contains(where: { $0.proofAttempt?.stableID == attemptID }) != true {
+            switchBranch(to: branchID)
+        }
         review = ReviewSelection(candidateAttemptIDs: first.attemptID.map { [$0] } ?? [], highlightedStatementID: node.id)
         reviewStepID = first.stepID
         activeView = .review

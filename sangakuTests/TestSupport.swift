@@ -199,3 +199,23 @@ nonisolated struct SeededGenerator: RandomNumberGenerator {
         return z ^ (z >> 31)
     }
 }
+
+/// What is running, as a test decides it.
+final class TestActivity: BranchActivity {
+    var liveMessageIDs: Set<UUID> = []
+    var streamingBranchIDs: Set<UUID> = []
+}
+
+extension PreviewFixtures.Handles {
+    /// A branch manager on the example whose running requests the test decides.
+    func branchManager(activity: TestActivity, now: @escaping () -> Date = { .now }) -> BranchManager {
+        BranchManager(context: state.container.mainContext, saves: state.saves, problems: state.problems,
+                      statements: state.graph, activity: activity, now: now)
+    }
+
+    /// The offers for a branch as the menus read them.
+    func offers(for branch: Branch, activity: TestActivity, hidesAuthors: Bool = false) -> BranchOffers {
+        BranchOffers(branch, mainBranchID: problem.mainBranchID, streaming: activity.streamingBranchIDs,
+                     live: activity.liveMessageIDs, hidesAuthors: hidesAuthors)
+    }
+}

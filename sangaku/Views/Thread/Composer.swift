@@ -32,6 +32,7 @@ private struct ComposerContent: View {
     @Bindable var draft: ComposerDraft
 
     @Environment(\.problemManager) private var problems
+    @Environment(\.branchActions) private var branchActions
     @Environment(\.credentialManager) private var credentials
     @Environment(\.mathContext) private var mathContext
     @Query private var messages: [Message]
@@ -60,10 +61,18 @@ private struct ComposerContent: View {
         let keyState = credentials?.state(for: providerID) ?? .unknown
         let streaming = threads.streamingBranchIDs.contains(branch.stableID)
         let allowed = problems?.allows(providerID, for: problem) ?? false
+        let closed = branch.state.isClosed
         VStack(alignment: .leading, spacing: 8) {
             RecipientControls(problem: problem, draft: draft)
 
-            if !allowed {
+            if closed {
+                // Nothing is sent on a dead end or parked branch; the draft is kept for when it is reopened.
+                Banner(systemImage: "arrow.uturn.backward",
+                       text: ContextError.branchClosed(branch.state).message) {
+                    Button("Reopen Branch") { branchActions?(.reopen(branchID: branch.stableID)) }
+                        .disabled(branchActions == nil)
+                }
+            } else if !allowed {
                 PolicyBanner(providerName: plan?.providerName ?? providerID) {
                     problems?.setProvider(providerID, allowed: true, for: problem)
                 }
@@ -101,14 +110,15 @@ private struct ComposerContent: View {
             PreviewStrip(text: draft.text, macros: mathContext.macros)
                 .frame(height: Self.previewHeight)
 
-            if let plan, allowed {
+            // A closed branch sends nothing, so there is no context to show.
+            if let plan, allowed, !closed {
                 ContextChips(plan: plan, showingDropped: $showingDropped)
             }
 
             SendBar(plan: allowed ? plan : nil, streaming: streaming,
                     stopsAll: threads.runs.values.contains { $0.branchID == branch.stableID },
                     canSend: !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && allowed
-                        && keyState != .missing,
+                        && keyState != .missing && !closed,
                     send: send, stop: { threads.stop(branchID: branch.stableID) })
 
             if let blocker = refusal ?? plan?.blocker, Self.showsInline(blocker) {
@@ -148,10 +158,11 @@ private struct ComposerContent: View {
         }
     }
 
-    /// Blockers with their own banner or control (policy, key, Stop, an empty editor) are not repeated.
+    /// Blockers with their own banner or control (policy, key, Stop, an empty editor, a closed branch) are not
+    /// repeated.
     private static func showsInline(_ blocker: SendBlocker) -> Bool {
         switch blocker {
-        case .emptyMessage, .busy, .providerNotAllowed, .missingKey: false
+        case .emptyMessage, .busy, .providerNotAllowed, .missingKey, .context(.branchClosed), .recipient(_, .branchClosed): false
         case .noRolePrompt, .noProvider, .context, .noProver, .slotCannotReceive, .recipient, .slotMissing, .compare: true
         }
     }

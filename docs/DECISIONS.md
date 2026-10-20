@@ -3,6 +3,106 @@
 Settled decisions, newest first. Each records what was decided, when, and why. Open questions stay in the spec's
 *Open decisions* list until they move here.
 
+## 2026-10-19: Milestone 7 architecture and choices
+
+- **Architecture.** The "clean" blueprint, chosen at the milestone's architecture step, with the trust guards of the
+  "pragmatic" one.
+  - A pure core (`Model/Values/Branches`): the history rule, the reasons rule, the adoption assessment, what can be done
+    to a branch (`BranchOffers`) and the tree.
+  - `BranchManager` is the only writer of a branch's state and texts, of the main-line pointer once a problem exists,
+    and of the adoption record. Every write is a person's, in the name of the person using the app.
+  - The theorem's proof is set only through `StatementGraph.adoptProof`, so statements keep one writer.
+    `ThreadManager` stays the only owner of requests; `BranchManager` reads what is running and cancels nothing.
+- **Schema** (V1 edited in place, additive):
+  - On `Branch`: who changed its state, and who wrote each reason, when and from which message.
+  - On `Problem`: the adopted attempt, who adopted it and when.
+  - `BranchState` keeps live, dead end and parked. The main line is `mainBranchID` alone and "running" is derived
+    from the requests in flight; stored "adopted" or "running" values read as live.
+  - A copy of the existing store opened with the new schema, without a reset.
+- **A fork carries its history.** Chosen in the milestone's questions.
+  - A branch forked from a message reads its parent's history up to and including that message, cut by position and
+    recursively, then its own messages. Nothing is copied, so IDs, `derivedFromIDs` and fan-out grouping stay
+    intact (invariant 4).
+  - One function decides it. What models are sent (`ProblemSnapshot.make`), the thread, Review and Compare all take
+    `Branch.visibleHistory`, and only that function makes one, so the screen never shows something other than what
+    the model is sent.
+  - A missing fork point or a cycle fails closed: the branch's own messages, a stated fault, and nothing sent.
+  - Inherited messages are the oldest, so a short window leaves them out first; each is listed as "before the
+    fork" (invariant 5).
+  - A fork made inside a fan-out shows only the attempts before the fork point. A referee there is refused, as it
+    would judge only some of them.
+  - A fork's new messages are stamped after everything it shows. A person's revision is stamped after every message
+    in the problem, so a referee running on a fork never seems to have seen it (rule 4).
+- **Forking** works from any message's menu or VoiceOver action, and from New Branch on the Branches screen (the
+  shown branch's latest message). It is refused while the message, or one before it, is still being written. Names
+  are one line and unique in the problem.
+- **Closed branches send nothing.** Every request that writes on a branch passes through `ContextBuilder`, which
+  refuses a dead end or parked branch ("Reopen it to continue"). An alignment, which writes nothing on the branch,
+  may still compare attempts on one. The composer shows the reason with a one-click Reopen and keeps the draft.
+- **Dead ends and reasons.** Chosen in the milestone's questions.
+  - Marking a dead end turns In Context on by default. With it on, a reason is required, since models would
+    otherwise be told "(no reason recorded)".
+  - Parked branches are never sent.
+  - Reopening keeps the reasons as history. The main line, and a branch with a request running, cannot be retired.
+  - Both texts are written by people. Each can start from a message the branch shows, which is recorded ("Written by
+    You, edited from Model A's reply"). No model writes or drafts a reason.
+- **Adopt = proof + main line.** Chosen in the milestone's questions.
+  - Adopting an attempt sets the theorem's source steps to its steps, records who adopted which attempt and when, and
+    makes the branch the attempt was written on the main line. Chosen in the architecture step; adopting from a fork
+    names that branch.
+  - The theorem's status then derives from the steps as for any statement, so adopting checks nothing (invariants 1
+    and 13).
+  - A gap, an unrefereed or revised attempt, or a partial one can be adopted once its warnings are acknowledged. If
+    what is known changes before confirming, the adoption is refused and the warnings are shown again.
+  - An attempt on a closed branch is refused ("Reopen it first"). A referee's "complete" adopts nothing.
+  - In Compare, Adopt waits while blind mode hides the authors, and names attempts only through `CompareIdentity`
+    (invariant 9). Adopting records no blind verdict.
+- **The main line's mark is ◆, not ✓.** Chosen in the architecture step. ✓ is "checked by a person", and the main line
+  is a person's choice, not a check. Its frame is a light neutral fill in ink, so an adopted proof nobody checked
+  never looks checked (invariant 3). "Running" is ● in ink, since blue means checked by a model.
+- **Cherry-pick = salvage as a lemma.** Chosen in the milestone's questions. "Cherry-pick a step" opens Promote on the
+  branch's own attempts. The lemma refers to the original steps, so their reviews, verdict and authors count as they
+  are, and the tree shows it under the attempt it came from.
+- **No deletion** of branches or messages. Chosen in the milestone's questions. A branch is retired by marking it a
+  dead end or parked, and reopened. A test pins that every deletion in the app is of a problem, a notation entry, a
+  review or a statement. This closes the Milestone 4 risk to lemmas' source steps.
+- **Switching branch.** Chosen in the milestone's questions.
+  - Clicking a branch in the sidebar shows it in Thread, Review and Compare. Open Messages does the same and goes to
+    the thread, which says which branch it is on and where a fork came from.
+  - Sidebar branch rows are buttons, never tagged into the list's problem selection.
+  - Selecting a node on the Branches screen fills its panel only.
+- **The Branches screen.**
+  - The tree is drawn on its side, one row per node in reading order and indented under its parent, so it wraps to
+    any width and reads in the same order as the outline and VoiceOver. Rails run down the parent's side, dashed to
+    a dead end and dotted to a parked branch. An outline display drops the frames.
+  - Each attempt is framed by the status a statement resting on its steps would earn, never more.
+  - The panel shows what the branch is and where it came from, why it died with its provenance, and the exact line
+    models are sent with the In Context toggle. Its actions are disabled with the reason in words.
+  - "What every new prompt carries" uses the same snapshot and line functions as `ContextBuilder` (`PromptCarries`).
+  - J and K, the Branches menu and rotors move through it.
+  - The inspector's placed layout and edge drawing were made shared components.
+  - **Layout rule:** content laid out at a measured width must not ask for that width. AppKit sizes the window's
+    column from the content's minimum, and an early tree that held its width put the window into a constraint loop
+    that aborted it.
+- **After the review.**
+  - Blind mode gates every branch sheet that names who wrote what (New Branch, the reasons sheet, Cherry-pick), not
+    only Compare's Adopt. The handler refuses it while blind mode hides the authors, whichever screen asked, and the
+    sheet host does not show one asked for earlier until blind mode is off or Compare is left (invariant 9). Reopen
+    names nobody, and Compare offers Adopt only once the attempts are shown, so neither waits.
+  - One source of branch actions. The sidebar's menu, the tree's node menu, the Branches panel and the Branches menu
+    all draw the items `BranchOffers` gives, with its refusals in words. A test runs every action on every branch of
+    the example, running or not, against the manager.
+  - New Branch from a branch's latest message is refused while a request runs on the branch: that message is still
+    being written.
+  - Running is drawn as ● in ink on the tree's node, the thread's branch header and the panel.
+  - A node's caption never says more than its frame. A "complete" verdict given before a step changed reads
+    "complete, but steps 3 and 5 changed since".
+  - Review Steps in the inspector shows the branch a statement's steps were written on when the window's branch does
+    not show them.
+  - Branch intents carry stable IDs and are resolved through the manager when handled, so a handler kept across a
+    problem switch acts on the right branch.
+  - Branch names are drawn with `MathText` and spoken as it speaks them, never as LaTeX source.
+
 ## 2026-10-19: Milestone 6 architecture and choices
 
 - **Architecture.** The "clean" blueprint, chosen at the milestone's architecture step, with the blind-mode safeguards

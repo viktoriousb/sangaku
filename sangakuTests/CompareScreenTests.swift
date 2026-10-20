@@ -222,14 +222,14 @@ struct CompareWindowTests {
     func keys() {
         let rows = [RowKey(a: UUID(), b: nil), RowKey(a: UUID(), b: UUID()), RowKey(a: nil, b: UUID())]
         func move(_ key: String, from current: RowKey?, typing: Bool = false, shift: Bool = false) -> RowKey? {
-            CompareKeys.move(ListKeyInput(characters: key, shift: shift), isTyping: typing, from: current, in: rows)
+            ListKeys.move(ListKeyInput(characters: key, shift: shift), isTyping: typing, from: current, in: rows)
         }
         #expect(move("j", from: nil) == rows[0] && move("k", from: nil) == rows[2])
         #expect(move("j", from: rows[0]) == rows[1] && move("J", from: rows[2]) == rows[2])
         #expect(move("k", from: rows[0]) == rows[0])
         #expect(move("j", from: rows[0], typing: true) == nil && move("j", from: rows[0], shift: true) == nil)
-        #expect(move("x", from: rows[0]) == nil && CompareKeys.move(ListKeyInput(characters: "j"), isTyping: false,
-                                                                    from: nil, in: []) == nil)
+        #expect(move("x", from: rows[0]) == nil && ListKeys.move(ListKeyInput(characters: "j"), isTyping: false,
+                                                                 from: nil, in: [RowKey]()) == nil)
     }
 }
 

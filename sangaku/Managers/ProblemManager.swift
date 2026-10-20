@@ -80,9 +80,7 @@ final class ProblemManager {
 
     func problem(id: UUID?) -> Problem? {
         guard let id else { return nil }
-        var descriptor = FetchDescriptor<Problem>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        return context.first(Problem.self, stableID: id)
     }
 
     /// The most recently created problem, which a new window opens on.

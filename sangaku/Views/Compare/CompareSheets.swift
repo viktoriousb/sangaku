@@ -61,19 +61,8 @@ struct AlignSheet: View {
                         .foregroundStyle(ColorToken.refuted.color)
                 }
             }
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(ColorToken.refuted.color)
-                    .font(.callout)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Align") { align() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(aligner == nil)
-            }
+            SheetErrorLine(error: error)
+            SheetButtons(confirm: "Align", disabled: aligner == nil) { align() }
         }
         .padding(20)
         .frame(width: 480)
@@ -137,19 +126,9 @@ struct QuestionSheet: View {
                 .frame(minHeight: 200)
                 .overlay { RoundedRectangle(cornerRadius: 4).strokeBorder(.separator) }
                 .accessibilityLabel("Message to \(draft.recipient)")
-            if let error {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(ColorToken.refuted.color)
-                    .font(.callout)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Send") { send() }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
+            SheetErrorLine(error: error)
+            SheetButtons(confirm: "Send", shortcut: KeyboardShortcut(.return, modifiers: .command),
+                         disabled: text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) { send() }
         }
         .padding(20)
         .frame(width: 560)

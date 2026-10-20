@@ -15,6 +15,12 @@ struct ComposedMath {
 }
 
 enum MathTextComposer {
+    /// What VoiceOver says for prose with math: formulas as `MathText` speaks them, for a label on a view that draws
+    /// the text itself.
+    static func spoken(_ source: String, renderer: MathRenderer?, context: MathContext) -> String {
+        compose(source, renderer: renderer, context: context).accessibilityText
+    }
+
     /// `mark` (UTF-16 offsets into `source`) is underlined and tinted where it can be: in prose and in formulas set as
     /// text. A mark that would cut a formula is not drawn; the caller says it in words as well.
     static func compose(_ source: String, renderer: MathRenderer?, context: MathContext,

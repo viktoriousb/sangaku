@@ -18,6 +18,10 @@ nonisolated enum RequestPurpose: Hashable, Sendable {
         case .alignment(let slot, _): slot
         }
     }
+
+    var isAlignment: Bool {
+        if case .alignment = self { true } else { false }
+    }
 }
 
 nonisolated struct ContextInput: Sendable {
@@ -48,6 +52,10 @@ nonisolated enum ContextError: Error, Hashable, Sendable {
     case fanOutNotOnBranch(UUID)
     /// An attempt to align is not on this branch.
     case attemptNotOnBranch(UUID)
+    /// Nothing more is sent on a dead end or parked branch until a person reopens it.
+    case branchClosed(BranchState)
+    /// A fork's earlier history cannot be read, so the conversation would be silently short (invariant 5).
+    case historyUnreadable(BranchHistory.Fault)
 
     var message: String {
         switch self {
@@ -63,6 +71,10 @@ nonisolated enum ContextError: Error, Hashable, Sendable {
             "The fan-out this request belongs to is not on this branch."
         case .attemptNotOnBranch:
             "An attempt to compare is not on this branch."
+        case .branchClosed(let state):
+            "This branch is \(state.phrase). Reopen it to continue."
+        case .historyUnreadable(let fault):
+            fault.message + " Nothing was sent."
         }
     }
 }
@@ -163,6 +175,10 @@ nonisolated struct ContextBuilder: Sendable {
         guard snapshot.allowedProviderIDs.contains(input.providerID) else {
             throw .providerNotAllowed(input.providerID)
         }
+        // Every request that writes on a branch passes here, so this is the one place a closed branch refuses. An
+        // alignment writes nothing on the branch, so it may compare attempts on one.
+        if let fault = snapshot.historyFault { throw .historyUnreadable(fault) }
+        if snapshot.branchState.isClosed, !input.purpose.isAlignment { throw .branchClosed(snapshot.branchState) }
 
         let recipient = input.purpose.slot
         var withheld: Set<UUID> = []
@@ -246,10 +262,8 @@ nonisolated struct ContextBuilder: Sendable {
 
         let formatTokens = input.format.map { estimator.blockTokens($0.schemaJSON) } ?? 0
         // The graph's order, so the cached prefix is the same on every send.
-        var lemmas = snapshot.adoptedLemmas.sorted {
-            StatementGraphState.precedes(($0.createdAt, $0.label, $0.id), ($1.createdAt, $1.label, $1.id))
-        }
-        var deadEnds = snapshot.deadEnds.sorted { $0.createdAt < $1.createdAt }
+        var lemmas = Self.ordered(snapshot.adoptedLemmas)
+        var deadEnds = Self.ordered(snapshot.deadEnds)
         var omittedLemmas = 0
         var omittedDeadEnds = 0
         var dropped: [DroppedContextItem] = []
@@ -437,6 +451,7 @@ nonisolated struct ContextBuilder: Sendable {
         let body = message.body.trimmingCharacters(in: .whitespacesAndNewlines)
         let preview = body.isEmpty ? (message.steps.first?.textLaTeX ?? "") : body
         let title = "\(Self.authorName(message.author, in: snapshot)) · \(String(preview.prefix(60)))"
+            + (message.inherited ? " (before the fork)" : "")
         return Unit(messageID: message.id, role: role, text: text, tokens: estimator.blockTokens(text), dropTitle: title)
     }
 
@@ -517,6 +532,16 @@ nonisolated struct ContextBuilder: Sendable {
         var body = lines.isEmpty && omitted == 0 ? ["(none yet)"] : lines
         if omitted > 0 { body.append("(\(omitted) more left out to fit the context window)") }
         return "<\(tag)>\n" + body.joined(separator: "\n") + "\n</\(tag)>"
+    }
+
+    /// Adopted lemmas in the order they are sent: the graph's order, so the cached prefix is the same on every send.
+    static func ordered(_ lemmas: [ProblemSnapshot.StatementDigest]) -> [ProblemSnapshot.StatementDigest] {
+        lemmas.sorted { StatementGraphState.precedes(($0.createdAt, $0.label, $0.id), ($1.createdAt, $1.label, $1.id)) }
+    }
+
+    /// Dead ends in the order they are sent, oldest first.
+    static func ordered(_ deadEnds: [ProblemSnapshot.DeadEndDigest]) -> [ProblemSnapshot.DeadEndDigest] {
+        deadEnds.sorted { BranchHistory.precedes(($0.createdAt, $0.id), ($1.createdAt, $1.id)) }
     }
 
     static func lemmaLine(_ lemma: ProblemSnapshot.StatementDigest) -> String {

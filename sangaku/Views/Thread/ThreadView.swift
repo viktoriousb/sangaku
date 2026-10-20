@@ -49,7 +49,8 @@ struct ThreadView: View {
     }
 }
 
-/// The messages of one branch, oldest first.
+/// The messages of one branch as models on it see them (`Branch.visibleHistory`): a fork's inherited messages, a
+/// divider where it was forked, then its own, oldest first.
 private struct BranchMessages: View {
     let problem: Problem
     let branch: Branch
@@ -72,21 +73,28 @@ private struct BranchMessages: View {
     var body: some View {
         // Read once, not in every row.
         let live = threads?.live ?? [:]
-        let items = ThreadItem.make(messages)
+        let history = branch.visibleHistory(own: messages)
+        let items = ThreadItem.make(history.all)
+        let inherited = history.inheritedIDs
+        let authors = AuthorDirectory(problem: problem, people: people, catalog: threads?.catalog ?? .standard)
         let context = ThreadContext(
-            problem: problem, branch: branch, items: items, messages: messages, live: live, runs: threads?.runs ?? [:],
-            notices: threads?.refereeNotices ?? [:],
-            authors: AuthorDirectory(problem: problem, people: people, catalog: threads?.catalog ?? .standard),
+            problem: problem, branch: branch, items: items, messages: history.all, live: live,
+            runs: threads?.runs ?? [:], notices: threads?.refereeNotices ?? [:], authors: authors,
             busy: threads?.streamingBranchIDs.contains(branch.stableID) ?? true)
+        // The divider goes before the first item of the branch's own, or after everything when it has none yet.
+        let firstOwn = items.first { !inherited.contains($0.id) }?.id
         LazyVStack(alignment: .leading, spacing: 14) {
-            if messages.isEmpty {
-                Text("No messages on this branch yet.")
+            BranchHeader(problem: problem, branch: branch, history: history, authors: authors)
+            if history.all.isEmpty {
+                Text(BranchWording.noMessage)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             }
             ForEach(items) { item in
+                if !inherited.isEmpty, item.id == firstOwn { ForkDivider(branch: branch) }
                 ThreadItemView(item: item, context: context, onViewContext: { contextRecord = $0 })
             }
+            if !inherited.isEmpty, firstOwn == nil { ForkDivider(branch: branch) }
         }
         .sheet(item: $contextRecord) { record in
             RequestContextSheet(record: record)
@@ -95,6 +103,7 @@ private struct BranchMessages: View {
             threads?.reconcileOrphans(in: branch)
         }
         .onChange(of: messages.count) { onNewMessage() }
+        .id(branch.stableID)
         // A reply that finished may have grown past the end while it streamed.
         .onChange(of: live.count) { onNewMessage() }
     }

@@ -14,13 +14,18 @@ enum ThreadItem: Identifiable {
         }
     }
 
-    /// `messages` oldest first, as a branch sorts them.
+    /// `messages` oldest first, as a branch's visible history gives them. A fan-out shows only the attempts among
+    /// them: on a fork made inside a fan-out, the later attempts are not part of the branch, and models on it are
+    /// never sent them.
     static func make(_ messages: [Message]) -> [ThreadItem] {
+        let shown = Set(messages.map(\.stableID))
         var grouped = Set<UUID>()
         var items: [ThreadItem] = []
         for message in messages {
             if let fanOut = message.fanOut {
-                let attempts = (fanOut.attempts ?? []).compactMap(\.message).sorted { $0.createdAt < $1.createdAt }
+                let attempts = (fanOut.attempts ?? []).compactMap(\.message)
+                    .filter { shown.contains($0.stableID) }
+                    .sorted { $0.createdAt < $1.createdAt }
                 grouped.formUnion(attempts.map(\.stableID))
                 items.append(.fanOut(prompt: message, fanOut: fanOut, attempts: attempts))
             } else if !grouped.contains(message.stableID) {
@@ -95,8 +100,10 @@ struct ThreadItemView: View {
             VStack(alignment: .leading, spacing: 12) {
                 MessageRow(message: prompt, stream: nil, authors: context.authors, onViewContext: onViewContext,
                            onStop: {})
+                // A fan-out running on the parent branch is not this branch's to stop or referee.
                 FanOutBlock(fanOut: fanOut, attempts: attempts, problem: context.problem, branch: context.branch,
-                            live: context.live, run: context.runs[fanOut.stableID],
+                            live: context.live,
+                            run: context.runs[fanOut.stableID].flatMap { $0.branchID == context.branch.stableID ? $0 : nil },
                             notice: context.notices[fanOut.stableID],
                             refereeGaveVerdicts: context.refereeGaveVerdicts[fanOut.stableID], busy: context.busy,
                             authors: context.authors, onViewContext: onViewContext)

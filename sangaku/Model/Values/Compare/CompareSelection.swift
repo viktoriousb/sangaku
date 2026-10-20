@@ -110,18 +110,7 @@ nonisolated enum ThreadAgreement {
     }
 }
 
-/// The row list's keys: J and K move between rows while the list has the keyboard, never while typing.
+/// The row list's keys: J and K move between rows while the list has the keyboard, never while typing (`ListKeys`).
 nonisolated enum CompareKeys {
     static let legend = "J / K between rows"
-    static let characters = CharacterSet(charactersIn: "jkJK")
-
-    /// The row J or K moves to from `current`; nil for any other key, any modifier, or while typing.
-    static func move(_ input: ListKeyInput, isTyping: Bool, from current: RowKey?, in order: [RowKey]) -> RowKey? {
-        guard !isTyping, !input.command, !input.option, !input.control, !input.shift else { return nil }
-        switch input.characters.lowercased() {
-        case "j": return ListNavigation.move(forward: true, from: current, in: order)
-        case "k": return ListNavigation.move(forward: false, from: current, in: order)
-        default: return nil
-        }
-    }
 }

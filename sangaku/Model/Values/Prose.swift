@@ -12,4 +12,9 @@ nonisolated enum Prose {
     static func count(_ number: Int, _ noun: String) -> String {
         "\(number) \(noun)\(number == 1 ? "" : "s")"
     }
+
+    /// The same for a noun whose plural is not a plain "s": "4 entries".
+    static func count(_ number: Int, _ noun: String, plural: String) -> String {
+        "\(number) \(number == 1 ? noun : plural)"
+    }
 }

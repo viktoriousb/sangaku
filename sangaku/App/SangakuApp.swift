@@ -54,6 +54,7 @@ struct SangakuApp: App {
             SangakuCommands(problems: app.problems)
             ReviewCommands()
             CompareCommands()
+            BranchesCommands()
         }
 
         Settings {

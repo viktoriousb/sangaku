@@ -10,8 +10,13 @@ extension SangakuSchemaV1 {
         var statementLaTeX: String = ""
         /// Providers this problem may be sent to (invariant 15). Empty means none yet.
         var allowedProviderIDs: [String] = []
-        /// The branch that holds the main line. Branches are siblings, so "main" is a pointer, not a flag.
+        /// The branch that holds the main line: a pointer, never a branch state. Moved only by adopting an attempt.
         var mainBranchID: UUID?
+        /// The adopted attempt, whose steps are the pinned theorem's proof, and who adopted it when. A record of a
+        /// person's choice; the theorem's status still derives from those steps (invariants 1 and 13).
+        var adoptedAttemptID: UUID?
+        var adoptedByID: UUID?
+        var adoptedAt: Date?
         /// The statement the pinned card shows a status for, usually the main theorem.
         var pinnedStatementID: UUID?
         var createdByID: UUID?
@@ -37,7 +42,12 @@ extension SangakuSchemaV1 {
         }
 
         var sortedBranches: [Branch] {
-            (branches ?? []).sorted { $0.createdAt < $1.createdAt }
+            (branches ?? []).sorted { ($0.createdAt, $0.stableID.uuidString) < ($1.createdAt, $1.stableID.uuidString) }
+        }
+
+        /// The main line, or the first branch if the pointer is missing.
+        var mainBranch: Branch? {
+            sortedBranches.first { $0.stableID == mainBranchID } ?? sortedBranches.first
         }
 
         var sortedModelSlots: [ModelSlot] {

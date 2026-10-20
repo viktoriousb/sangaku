@@ -113,8 +113,6 @@ final class AlignmentService {
     }
 
     private func attempt(_ id: UUID) -> ProofAttempt? {
-        var descriptor = FetchDescriptor<ProofAttempt>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        return try? context.fetch(descriptor).first
+        context.first(ProofAttempt.self, stableID: id)
     }
 }

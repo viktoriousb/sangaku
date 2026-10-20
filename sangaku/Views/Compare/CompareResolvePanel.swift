@@ -1,14 +1,17 @@
 import SwiftUI
 
-/// The resolve panel for the current row: the blind verdict, and the requests that act on a disagreement.
+/// The resolve panel for the current row: the blind verdict, the requests that act on a disagreement, and adopting
+/// an attempt as the main line.
 struct ResolvePanel: View {
     let row: CompareRow?
     let identity: CompareIdentity
     let run: CompareRunInfo
     /// What came of the last verdict or request made here.
     var notice: CompareNotice?
+    var adoption: CompareAdoption = .none
     let onHolds: @MainActor (HoldsVerdict) -> Void
     let onAsk: @MainActor (QuestionDraft) -> Void
+    var onAdopt: @MainActor (UUID) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -32,19 +35,45 @@ struct ResolvePanel: View {
                     .foregroundStyle(notice.isError ? ColorToken.refuted.color : .secondary)
             }
             Divider()
+            adopt
             FlowLayout(spacing: 8, lineSpacing: 6) {
-                Button("Adopt an Attempt") {}
-                    .disabled(true)
                 Button("Search for a Counterexample") {}
                     .disabled(true)
             }
-            Text("Adopting an attempt as the main line arrives with Milestone 7; counterexample searches with Milestone 8.")
+            Text("Counterexample searches arrive with Milestone 8.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background.secondary, in: .rect(cornerRadius: 10))
+    }
+
+    /// Adopting one attempt as the main line; while blind it waits, in words a keyboard user sees too.
+    @ViewBuilder private var adopt: some View {
+        switch adoption {
+        case .none:
+            EmptyView()
+        case .waitingForVerdict:
+            Button("Adopt an Attempt") {}
+                .disabled(true)
+            Text(CompareAdoption.blindCaption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .choices(let choices):
+            FlowLayout(spacing: 8, lineSpacing: 6) {
+                ForEach(choices) { choice in
+                    if choice.isAdopted {
+                        Label(BranchWording.isMainProof(CompareWording.attempt(choice.side)), systemImage: "diamond.fill")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button(choice.title) { onAdopt(choice.attemptID) }
+                            .help(BranchWording.adoptHelp)
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder private var verdict: some View {

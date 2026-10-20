@@ -120,7 +120,7 @@ struct ReviewWindowStateTests {
 
         let lemma3 = try #require(fixture.state.graph.state(for: fixture.problem)[fixture.lemmas[2].stableID])
         window.activeView = .thread
-        window.openReview(statement: lemma3)
+        window.openReview(statement: lemma3, in: fixture.problem)
         #expect(window.activeView == .review)
         #expect(window.review.candidateAttemptIDs == [fixture.attemptA.stableID])
         #expect(window.reviewStepID == fixture.attemptA.sortedSteps[2].stableID, "its first source step")
@@ -139,7 +139,7 @@ struct ReviewWindowStateTests {
     func noSources() throws {
         let window = WindowState()
         let conjecture = try #require(fixture.state.graph.state(for: fixture.problem)[fixture.conjecture.stableID])
-        window.openReview(statement: conjecture)
+        window.openReview(statement: conjecture, in: fixture.problem)
         #expect(window.activeView == .thread && window.review == ReviewSelection())
     }
 }

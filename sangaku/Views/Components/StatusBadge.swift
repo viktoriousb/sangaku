@@ -33,7 +33,7 @@ struct StatusBadge: View {
         .foregroundStyle(style.glyphToken.color)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(style.fill?.color ?? .clear, in: .capsule)
+        .background(style.fill?.color.opacity(style.fillOpacity) ?? .clear, in: .capsule)
         .overlay {
             Capsule().strokeBorder(style.borderToken.color,
                                    style: StrokeStyle(lineWidth: presentation.borderWidth, dash: presentation.dash))
@@ -58,7 +58,13 @@ struct StatusFrame: ViewModifier {
             style: style,
             accessibility: .resolve(override: override, differentiateWithoutColor: differentiateWithoutColor, contrast: contrast))
         content
-            .background(style.fill?.color ?? Color(nsColor: .textBackgroundColor), in: .rect(cornerRadius: cornerRadius))
+            .background {
+                // A tint is laid over the text background, so a neutral fill reads in both appearances.
+                RoundedRectangle(cornerRadius: cornerRadius).fill(Color(nsColor: .textBackgroundColor))
+                if let fill = style.fill {
+                    RoundedRectangle(cornerRadius: cornerRadius).fill(fill.color.opacity(style.fillOpacity))
+                }
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .strokeBorder(style.borderToken.color,

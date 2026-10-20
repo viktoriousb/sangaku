@@ -12,6 +12,8 @@ struct AttemptCard: View {
     let onViewContext: (RequestRecord) -> Void
     let onStop: () -> Void
 
+    @Environment(\.branchActions) private var branchActions
+
     var body: some View {
         let attribution = authors.attribution(of: message)
         let outcome = message.outcome(isStreaming: stream != nil)
@@ -50,9 +52,11 @@ struct AttemptCard: View {
             if let record = message.request {
                 Button("View Context…") { onViewContext(record) }
             }
+            ForkMenuItem(message: message, running: stream != nil)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Attempt by \(authors.name(of: message.author))")
+        .forkAction(message: message, running: stream != nil, actions: branchActions)
     }
 
     /// The attempt as text: its overview and numbered steps, or the raw output when it was not read as steps.

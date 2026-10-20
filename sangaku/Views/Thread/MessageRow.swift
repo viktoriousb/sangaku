@@ -72,6 +72,12 @@ struct AuthorDirectory: Equatable {
         slots[slotID.rawValue]?.letter ?? "?"
     }
 
+    /// A model by its letter, a person by name: "A", "MK".
+    func shortName(of author: Author?) -> String {
+        if case .model(let slotID) = author { return letter(of: slotID) }
+        return name(of: author)
+    }
+
     /// A model by its slot's letter and colour; me in ink; other people in the co-author grey. Slots without a colour
     /// of their own share the grey: their letter tells them apart.
     func mark(of author: Author?) -> AuthorMark {
@@ -124,6 +130,8 @@ struct MessageRow: View {
     let onViewContext: (RequestRecord) -> Void
     let onStop: () -> Void
 
+    @Environment(\.branchActions) private var branchActions
+
     var body: some View {
         let outcome = message.outcome(isStreaming: stream != nil)
         let isModel = if case .model = message.author { true } else { false }
@@ -151,9 +159,11 @@ struct MessageRow: View {
             if let record = message.request {
                 Button("View Context…") { onViewContext(record) }
             }
+            ForkMenuItem(message: message, running: stream != nil)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Message from \(authors.name(of: message.author))")
+        .forkAction(message: message, running: stream != nil, actions: branchActions)
     }
 
     private func header(isModel: Bool) -> some View {

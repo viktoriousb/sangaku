@@ -40,14 +40,15 @@ private struct ReviewBranch: View {
     }
 
     var body: some View {
-        // Read once, not in every row.
-        let options = AttemptOption.make(messages: messages, live: Set((threads?.live ?? [:]).keys))
+        // Read once, not in every row. A fork offers the attempts it inherited as well as its own.
+        let visible = branch.visibleHistory(own: messages).all
+        let options = AttemptOption.make(messages: visible, live: threads?.liveMessageIDs ?? [])
         let personIDs = Set(people.map(\.stableID))
         let graphState = graph?.state(for: problem, people: personIDs)
         let chosen = ReviewAttemptChoice.resolve(window.review, among: options,
                                                  theoremSourceAttemptID: graphState?.pinned?.sources.first?.attemptID)
         if let chosen, let reviews,
-           let attempt = messages.lazy.compactMap(\.proofAttempt).first(where: { $0.stableID == chosen }) {
+           let attempt = visible.lazy.compactMap(\.proofAttempt).first(where: { $0.stableID == chosen }) {
             ReviewScreen(attempt: attempt, state: reviews.state(of: attempt, people: personIDs), options: options,
                          graph: graphState,
                          authors: AuthorDirectory(problem: problem, people: people, catalog: threads?.catalog ?? .standard),
@@ -185,7 +186,7 @@ private struct ReviewScreen: View {
     // MARK: Keys and menu
 
     private func handle(_ press: KeyPress, current: UUID?) -> KeyPress.Result {
-        let typing = focus != .list || TextEditingProbe.isTyping(firstResponder: NSApp.keyWindow?.firstResponder)
+        let typing = TextEditingProbe.typing(listHasFocus: focus == .list)
         guard let command = ReviewKeys.command(for: ListKeyInput(press), isTyping: typing) else { return .ignored }
         run(command, in: state, current: current)
         return .handled

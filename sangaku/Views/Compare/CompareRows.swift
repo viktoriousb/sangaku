@@ -280,7 +280,8 @@ private struct CompareRowFrame: ViewModifier {
 #Preview("Compare rows, table and cards", traits: .fixture, .fixedLayout(width: 1000, height: 1300)) {
     @Previewable @Query var problems: [Problem]
     @Previewable @Query var people: [Person]
-    @Previewable @Query(filter: #Predicate<ProofAttempt> { $0.message != nil }) var attempts: [ProofAttempt]
+    @Previewable @Query(sort: \ProofAttempt.createdAt) var stored: [ProofAttempt]
+    let attempts = stored.filter { $0.message != nil }
     if let problem = problems.first, attempts.count >= 2 {
         let state = ComparisonState.read(attempts[0], attempts[1], in: problem, people: Set(people.map(\.stableID)))
         let identity = CompareIdentity.read(state, of: attempts[0], attempts[1], in: problem, windowBlind: false,

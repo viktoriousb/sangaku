@@ -190,17 +190,13 @@ final class ReviewManager {
     // MARK: Helpers
 
     private func stepInProblem(_ id: UUID) throws(ReviewError) -> (Step, Problem) {
-        var descriptor = FetchDescriptor<Step>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        guard let step = try? context.fetch(descriptor).first,
+        guard let step = context.first(Step.self, stableID: id),
               let problem = step.attempt?.message?.branch?.problem else { throw .noSuchStep }
         return (step, problem)
     }
 
     private func reviewInProblem(_ id: UUID) throws(ReviewError) -> (Review, Step, Problem) {
-        var descriptor = FetchDescriptor<Review>(predicate: #Predicate { $0.stableID == id })
-        descriptor.fetchLimit = 1
-        guard let review = try? context.fetch(descriptor).first, let step = review.step else { throw .noSuchReview }
+        guard let review = context.first(Review.self, stableID: id), let step = review.step else { throw .noSuchReview }
         guard let problem = step.attempt?.message?.branch?.problem else { throw .noSuchStep }
         return (review, step, problem)
     }
@@ -262,12 +258,14 @@ final class ReviewManager {
     }
 
     /// Now, but always after everything already recorded on the step's attempt (revisions, reviews, dismissals,
-    /// withdrawals, comments, the referee's request and verdict times) and every message on its branch, a referee's
-    /// request still running included. A clock running behind can then never make a person's revision look seen by
-    /// the referee (rule 4), or a ✓ look older than the change it answers.
+    /// withdrawals, comments, the referee's request and verdict times) and every message in its problem, a referee's
+    /// request still running included: a referee on a fork may judge an attempt written on its parent. A clock
+    /// running behind can then never make a person's revision look seen by the referee (rule 4), or a ✓ look older
+    /// than the change it answers.
     private func time(after step: Step) -> Date {
         let steps = step.attempt?.steps ?? [step]
-        var latest = (step.attempt?.message?.branch?.messages ?? []).map(\.createdAt).max() ?? .distantPast
+        var latest = step.attempt?.message?.branch?.problem?.latestMessageAt
+            ?? (step.attempt?.message?.branch?.messages ?? []).map(\.createdAt).max() ?? .distantPast
         for step in steps {
             for revision in step.revisions ?? [] { latest = max(latest, revision.createdAt) }
             for review in step.reviews ?? [] {
@@ -278,7 +276,7 @@ final class ReviewManager {
         for verdict in step.attempt?.verdicts ?? [] {
             latest = max(latest, verdict.createdAt, verdict.requestedAt ?? .distantPast)
         }
-        return max(now(), latest.addingTimeInterval(0.001))
+        return Timestamps.after(latest, now: now())
     }
 
     private func changed(_ problem: Problem) {
