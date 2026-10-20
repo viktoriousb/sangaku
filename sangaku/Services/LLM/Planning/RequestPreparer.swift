@@ -34,6 +34,10 @@ nonisolated struct RequestSpec: Hashable, Sendable {
         case attempt(fanOut: UUID)
         /// The referee pass over a fan-out's attempts.
         case referee(fanOut: UUID)
+        /// A referee-role slot aligning two attempts for Compare.
+        case align(AlignmentBasis)
+        /// A referee-role slot answering a question in prose (one row of a comparison): never a verdict.
+        case refereeReply
     }
 
     var slot: ProblemSnapshot.SlotDigest
@@ -73,6 +77,7 @@ nonisolated enum RequestPreparer {
         let role: SlotRole
         let purpose: RequestPurpose
         let format: OutputFormat?
+        var promptName: String?
         var pending = spec.pending
         switch spec.kind {
         case .reply:
@@ -83,9 +88,17 @@ nonisolated enum RequestPreparer {
             let letters = snapshot.fanOut(fanOut).map { attemptLetters($0, in: snapshot) } ?? []
             (role, purpose, format) = (.referee, .referee(slot: slot.id, fanOut: fanOut), .refereeVerdicts(letters: letters))
             pending = pending ?? refereeInstruction(letters: letters)
+        case .align(let basis):
+            (role, purpose, format) = (.referee, .alignment(slot: slot.id, basis: basis), .alignment)
+            promptName = "aligner"
+        case .refereeReply:
+            (role, purpose, format) = (.referee, .reply(slot: slot.id, fanOut: nil), nil)
+            promptName = "referee-reply"
         }
         guard slot.role == role else { throw .slotCannotReceive(letter: slot.letter, role: slot.role) }
-        guard let rolePrompt = env.prompts.prompt(for: role, structured: format != nil) else { throw .noRolePrompt(role) }
+        let prompt = promptName.map { env.prompts.prompt(named: $0, role: role) }
+            ?? env.prompts.prompt(for: role, structured: format != nil)
+        guard let rolePrompt = prompt else { throw .noRolePrompt(role) }
 
         let resolution = env.catalog.resolve(slot.modelID)
         let maxOutput = env.maxOutputTokens(for: resolution)

@@ -62,6 +62,10 @@ nonisolated struct StepFact: Hashable, Sendable, Identifiable {
     var comments: [CommentFact] = []
 
     var current: RevisionFact? { revisions.last }
+
+    /// The current revision's text and label, which a review binds to; `text` and `establishes` only mirror them.
+    var currentText: String { current?.textLaTeX ?? text }
+    var currentEstablishes: String { current?.establishes ?? establishes }
 }
 
 /// One attempt as plain values: its steps by index and its referee verdicts.

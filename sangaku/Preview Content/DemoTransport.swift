@@ -66,6 +66,9 @@ nonisolated final class DemoTransport: HTTPTransport {
               let format = config["format"] as? [String: Any],
               let schema = format["schema"] as? [String: Any],
               let properties = schema["properties"] as? [String: Any] else { return Self.answer }
+        if properties["rows"] != nil {
+            return Self.alignment(String(decoding: body, as: UTF8.self))
+        }
         if properties["steps"] != nil {
             let index = attempts.withLock { count in
                 defer { count += 1 }
@@ -84,6 +87,26 @@ nonisolated final class DemoTransport: HTTPTransport {
                     ? (letter, .complete, [], "Each step follows; the delicate one is the case $q = p + 1$.")
                     : (letter, .gap, [4], #"Step 4 is false: $q > p$ allows $q = p + 1$, as at $(p, q) = (2, 3)$."#)
             })
+    }
+
+    /// A demonstration alignment: steps paired by number, the last pair diverging, the rest of the longer attempt alone.
+    private static func alignment(_ body: String) -> String {
+        let parts = body.components(separatedBy: "[Attempt 2, to align")
+        func count(_ text: String) -> Int {
+            (try? NSRegularExpression(pattern: #"Step \d+ \(establishes:"#))?
+                .numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text)) ?? 0
+        }
+        let first = count(parts.first ?? ""), second = parts.count > 1 ? count(parts[1]) : 0
+        let paired = min(first, second)
+        var rows: [(label: String, step1: Int, step2: Int, note: String, verdict: String)] = (0..<paired).map { index in
+            let last = index == paired - 1
+            return ("Step \(index + 1)", index + 1, index + 1,
+                    last ? "A demonstration difference, not from a model." : "", last ? "diverge" : "equivalent")
+        }
+        rows += (paired..<max(first, second)).map { index in
+            first > second ? ("Step \(index + 1)", index + 1, 0, "", "only_1") : ("Step \(index + 1)", 0, index + 1, "", "only_2")
+        }
+        return DemoOutput.alignment(summary: "A demonstration alignment from the fixture, not from a model.", rows: rows)
     }
 
     static func events(_ text: String, inputTokens: Int) -> [String] {
@@ -143,6 +166,33 @@ nonisolated enum DemoOutput {
     private struct Report: Encodable {
         let verdicts: [Verdict]
         let summary: String
+    }
+
+    private struct Row: Encodable {
+        let label: String
+        let step1: Int
+        let step2: Int
+        let note: String
+        let phrase1: String
+        let phrase2: String
+        let verdict: String
+
+        enum CodingKeys: String, CodingKey {
+            case label, note, verdict
+            case step1 = "step_1", step2 = "step_2", phrase1 = "phrase_1", phrase2 = "phrase_2"
+        }
+    }
+
+    private struct Rows: Encodable {
+        let rows: [Row]
+        let summary: String
+    }
+
+    static func alignment(summary: String,
+                          rows: [(label: String, step1: Int, step2: Int, note: String, verdict: String)]) -> String {
+        encode(Rows(rows: rows.map {
+            Row(label: $0.label, step1: $0.step1, step2: $0.step2, note: $0.note, phrase1: "", phrase2: "", verdict: $0.verdict)
+        }, summary: summary))
     }
 
     static func attempt(overview: String, steps: [(establishes: String, confidence: Confidence, text: String)]) -> String {

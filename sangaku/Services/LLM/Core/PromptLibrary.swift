@@ -41,6 +41,11 @@ nonisolated struct PromptLibrary: Sendable {
         return source(name).flatMap { Self.parse($0, role: role, name: name) }
     }
 
+    /// A prompt by file name, for a purpose with a prompt of its own (the aligner, a referee's reply), used in `role`.
+    func prompt(named name: String, role: SlotRole) -> RolePrompt? {
+        source(name).flatMap { Self.parse($0, role: role, name: name) }
+    }
+
     static func fileName(_ role: SlotRole, structured: Bool) -> String {
         role == .prover && structured ? "prover-attempt" : role.rawValue
     }

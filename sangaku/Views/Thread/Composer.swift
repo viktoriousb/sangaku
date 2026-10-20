@@ -152,7 +152,7 @@ private struct ComposerContent: View {
     private static func showsInline(_ blocker: SendBlocker) -> Bool {
         switch blocker {
         case .emptyMessage, .busy, .providerNotAllowed, .missingKey: false
-        case .noRolePrompt, .noProvider, .context, .noProver, .slotCannotReceive, .recipient, .slotMissing: true
+        case .noRolePrompt, .noProvider, .context, .noProver, .slotCannotReceive, .recipient, .slotMissing, .compare: true
         }
     }
 }

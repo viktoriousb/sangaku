@@ -53,6 +53,8 @@ final class ThreadManager {
             case reply
             case attempt(fanOutID: UUID)
             case referee(fanOutID: UUID, attempts: [AttemptRef])
+            /// Keyed by its record's stable ID: an alignment has no message.
+            case alignment(AlignmentBasis)
         }
 
         var state: State
@@ -72,6 +74,7 @@ final class ThreadManager {
     private enum Parsed {
         case attempt(AttemptParse)
         case referee(RefereeReport?)
+        case alignment(AlignmentReport?)
     }
 
     init(context: ModelContext, saves: SaveScheduler, problems: ProblemManager, credentials: CredentialManager,
@@ -163,6 +166,7 @@ final class ThreadManager {
         let prompt = Message(author: .human(problems.me().personID), bodyLaTeX: ready.text, kind: .prompt)
         prompt.stableID = ready.promptID
         prompt.createdAt = ready.promptCreatedAt
+        prompt.derivedFromIDs = ready.promptDerivedFromIDs
         var fanOut: FanOut?
         if case .fanOut(let visibility) = ready.kind, let id = ready.fanOutID {
             let created = FanOut(visibility: visibility)
@@ -174,7 +178,7 @@ final class ThreadManager {
         }
         var messages = [prompt]
         for (index, member) in ready.members.enumerated() {
-            let message = Message(author: .model(member.slot.id), kind: fanOut == nil ? .reply : .attempt)
+            let message = Message(author: .model(member.slot.id), kind: fanOut == nil ? ready.replyKind : .attempt)
             message.stableID = member.messageID
             message.createdAt = member.createdAt
             message.derivedFromIDs = [prompt.stableID]
@@ -338,6 +342,103 @@ final class ThreadManager {
               slot: slot.id, role: .referee(fanOutID: fanOutID, attempts: attempts))
     }
 
+    // MARK: Questions about attempts
+
+    /// Sends a person's question about attempts to one slot: the author of a step, to repair it, or a referee, to
+    /// judge one row of a comparison. An ordinary prose exchange in the thread. Its prompt is linked to the attempts
+    /// (`derivedFromIDs`), so wherever those attempts are withheld from a model (invariant 4), so is the exchange.
+    /// Refused while either attempt is still being written, and with every check of a send; a refusal writes nothing.
+    @discardableResult
+    func ask(_ text: String, slot slotID: UUID, about attemptMessageIDs: [UUID], problem: Problem, branch: Branch,
+             effort: ThinkingEffort) throws(SendBlocker) -> UUID {
+        let running = attemptMessageIDs.filter { live[$0] != nil }
+        guard running.isEmpty else { throw .context(.attemptsUnfinished(running)) }
+        let snapshot = snapshot(problem: problem, branch: branch)
+        guard let slot = snapshot.slots.first(where: { $0.id.rawValue == slotID }) else { throw .slotMissing }
+        let last = branch.sortedMessages.last?.createdAt ?? .distantPast
+        let ready = try SendPlanner.readyQuestion(
+            text, to: slot, about: attemptMessageIDs, snapshot: snapshot, effort: effort,
+            busy: streamingBranchIDs.contains(branch.stableID), now: max(now(), last.addingTimeInterval(0.001)),
+            env: environment(for: problem))
+        commit(ready, problem: problem, branch: branch)
+        begin(ready, problemID: problem.stableID, branchID: branch.stableID)
+        return ready.members[0].messageID
+    }
+
+    // MARK: Alignment
+
+    /// What aligning two attempts would send and cost, or why it cannot be sent now. Nothing leaves the Mac.
+    func alignPlan(_ pair: ComparedPair, aligner: UUID, problem: Problem, branch: Branch,
+                   effort: ThinkingEffort) -> Result<SendPlan.Recipient, SendBlocker> {
+        do throws(SendBlocker) {
+            let (prepared, slot, _) = try prepareAlignment(pair, aligner: aligner, problem: problem, branch: branch,
+                                                           effort: effort)
+            return .success(SendPlanner.estimate(prepared, letter: slot.letter, env: environment(for: problem)))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Asks a referee-role slot that wrote neither attempt to align two attempts for Compare, in the order Compare
+    /// shows them whatever order they are passed in. The request's record belongs to the comparison, not to a
+    /// message, so nothing of it enters the thread or any later context. Refused, writing nothing, when the branch
+    /// is busy, the two attempts are one, an attempt is still being written (invariant 4), the slot may not align
+    /// them, the provider is not allowed (invariant 15) or no key is stored. The answer is stored when the request
+    /// ends (`apply(_:basis:record:aligner:)`).
+    @discardableResult
+    func align(_ pair: ComparedPair, aligner: UUID, problem: Problem, branch: Branch,
+               effort: ThinkingEffort) throws(SendBlocker) -> UUID {
+        let (prepared, slot, basis) = try prepareAlignment(pair, aligner: aligner, problem: problem, branch: branch,
+                                                           effort: effort)
+        let alignment = problem.alignment(for: basis.pair, creatingIn: context, at: now())
+        let record = RequestRecord()
+        record.createdAt = now()
+        describe(record, prepared, sent: true)
+        context.insert(record)
+        record.alignment = alignment
+        saves.markDirty()
+        start(prepared.request, messageID: record.stableID, problemID: problem.stableID, branchID: branch.stableID,
+              slot: slot.id, role: .alignment(basis))
+        return record.stableID
+    }
+
+    private func prepareAlignment(_ pair: ComparedPair, aligner: UUID, problem: Problem, branch: Branch,
+                                  effort: ThinkingEffort)
+        throws(SendBlocker) -> (PreparedRequest, ProblemSnapshot.SlotDigest, AlignmentBasis) {
+        guard !streamingBranchIDs.contains(branch.stableID) else { throw .busy }
+        guard pair.first != pair.second else { throw .compare(.notAPair) }
+        let pair = problem.orientation(of: pair.first, pair.second)
+        guard let first = attempt(pair.first), let second = attempt(pair.second),
+              let basis = AlignmentBasis.make(pair, first: first, second: second) else {
+            throw .context(.attemptNotOnBranch(pair.first))
+        }
+        let snapshot = snapshot(problem: problem, branch: branch)
+        guard let slot = snapshot.slots.first(where: { $0.id.rawValue == aligner }) else { throw .slotMissing }
+        guard slot.role == .referee, !AlignerChoice.authorSlots(first, second).contains(aligner) else {
+            throw .compare(.noAligner)
+        }
+        let env = environment(for: problem)
+        try SendPlanner.checkProvider(of: slot, snapshot: snapshot, env: env)
+        let prepared = try RequestPreparer.prepare(RequestSpec(slot: slot, kind: .align(basis), effort: effort),
+                                                   snapshot: snapshot, env: env)
+        return (prepared, slot, basis)
+    }
+
+    /// An aligner's answer, mapped failing closed (`AlignmentMapper`), replaces the comparison's model rows. An answer
+    /// with nothing usable leaves the earlier rows; a person's corrections and blind verdict are never touched.
+    private func apply(_ report: AlignmentReport?, basis: AlignmentBasis, record: RequestRecord, aligner: ModelSlotID) {
+        guard let report, let alignment = record.alignment, alignment.attemptAID == basis.first.attemptID,
+              let draft = AlignmentMapper.map(report, basis: basis) else {
+            record.parseState = .unstructured
+            return
+        }
+        alignment.rows = draft.rows
+        alignment.modelSummary = draft.summary
+        alignment.modelRunID = record.stableID
+        alignment.alignerSlotID = aligner.rawValue
+        record.parseState = .clean
+    }
+
     // MARK: Stop
 
     /// Stops a request. What arrived is kept and marked interrupted; a fan-out's referee still follows.
@@ -399,7 +500,8 @@ final class ThreadManager {
         }
     }
 
-    /// Requests that never ended (the app quit or crashed mid-stream) become interrupted, and say so.
+    /// Requests that never ended (the app quit or crashed mid-stream) become interrupted, and say so: the branch's
+    /// messages, and the alignment requests of its problem.
     func reconcileOrphans(in branch: Branch) {
         var changed = false
         for message in branch.messages ?? [] where active[message.stableID] == nil {
@@ -408,6 +510,13 @@ final class ThreadManager {
             record.stopReason = LocalStopReason.orphaned.rawValue
             message.interrupted = true
             changed = true
+        }
+        for alignment in branch.problem?.alignments ?? [] {
+            for record in alignment.requests ?? [] where record.finishedAt == nil && active[record.stableID] == nil {
+                record.finishedAt = now()
+                record.stopReason = LocalStopReason.orphaned.rawValue
+                changed = true
+            }
         }
         if changed { saves.markDirty() }
     }
@@ -420,27 +529,39 @@ final class ThreadManager {
         guard var request = active[id], request.state == .streaming else { return }
         let stream = live[id]
         stream?.flush()
-        guard let message = fetchMessage(id), let record = message.request else {
-            complete(id)
-            return
+        // An alignment writes only its record; every other request writes its message too.
+        let message: Message?
+        let record: RequestRecord
+        if case .alignment = request.role {
+            guard let found = fetchRecord(id) else {
+                complete(id)
+                return
+            }
+            (message, record) = (nil, found)
+        } else {
+            guard let found = fetchMessage(id), let foundRecord = found.request else {
+                complete(id)
+                return
+            }
+            (message, record) = (found, foundRecord)
         }
         let text = stream?.fullText ?? ""
-        message.bodyLaTeX = text
+        message?.bodyLaTeX = text
         record.answeredModelID = stream?.answeredModel.flatMap { $0.isEmpty ? nil : $0 }
         record.finishedAt = now()
         var usage = stream?.usage ?? TokenUsage()
         switch ending {
         case .finished(let reason, let final):
             usage = final
-            message.interrupted = false
+            message?.interrupted = false
             record.usageReported = true
             record.stopReason = reason.stored
             record.stopCategory = reason.category
         case .stopped(let reason):
-            message.interrupted = true
+            message?.interrupted = true
             record.stopReason = reason.rawValue
         case .failed(let error):
-            message.interrupted = !text.isEmpty
+            message?.interrupted = !text.isEmpty
             record.errorKind = error.kind
             record.errorMessage = error.message
         }
@@ -460,7 +581,14 @@ final class ThreadManager {
             return
         }
         record.rawOutput = text
-        if case .declined = message.outcome(isStreaming: false) {
+        let outcome = message?.outcome(isStreaming: false) ?? record.outcome
+        if case .declined = outcome {
+            record.parseState = .unstructured
+            complete(id)
+            return
+        }
+        // A partial alignment is not read: it keeps its raw output, and the comparison keeps its earlier rows.
+        if case .alignment = request.role, outcome != .complete {
             record.parseState = .unstructured
             complete(id)
             return
@@ -472,14 +600,13 @@ final class ThreadManager {
             settleNow(id)
             return
         }
-        let lenient = message.outcome(isStreaming: false).isPartial
+        let lenient = outcome.isPartial
         let role = request.role
         active[id]?.task = Task { [weak self] in
-            let parsed: Parsed
-            if case .referee = role {
-                parsed = .referee(await OutputParsing.referee(text))
-            } else {
-                parsed = .attempt(await OutputParsing.attempt(text, lenient: lenient))
+            let parsed: Parsed = switch role {
+            case .referee: .referee(await OutputParsing.referee(text))
+            case .alignment: .alignment(await OutputParsing.alignment(text))
+            case .reply, .attempt: .attempt(await OutputParsing.attempt(text, lenient: lenient))
             }
             self?.settle(id, parsed: parsed)
         }
@@ -487,7 +614,12 @@ final class ThreadManager {
 
     /// Reads a settling request's output at once (quitting).
     private func settleNow(_ id: UUID) {
-        guard let request = active[id], let message = fetchMessage(id) else { return }
+        guard let request = active[id] else { return }
+        if case .alignment = request.role {
+            settle(id, parsed: .alignment(AlignmentParser.parse(fetchRecord(id)?.rawOutput ?? "")))
+            return
+        }
+        guard let message = fetchMessage(id) else { return }
         let text = message.request?.rawOutput ?? message.bodyLaTeX
         if case .referee = request.role {
             settle(id, parsed: .referee(RefereeParser.parse(text)))
@@ -499,6 +631,14 @@ final class ThreadManager {
     private func settle(_ id: UUID, parsed: Parsed) {
         // Gone when its problem was deleted meanwhile.
         guard let request = active[id], request.state == .settling else { return }
+        if case .alignment(let basis) = request.role, case .alignment(let report) = parsed {
+            if let record = fetchRecord(id) {
+                apply(report, basis: basis, record: record, aligner: request.slot)
+                saves.markDirty()
+            }
+            complete(id)
+            return
+        }
         if let message = fetchMessage(id) {
             switch (request.role, parsed) {
             case (.attempt, .attempt(let parse)):
@@ -519,7 +659,7 @@ final class ThreadManager {
         live[id] = nil
         updateStreamingBranches()
         switch request.role {
-        case .reply: break
+        case .reply, .alignment: break
         case .attempt(let fanOutID): advance(fanOutID, .memberEnded(id))
         case .referee(let fanOutID, _): advance(fanOutID, .refereeEnded)
         }
@@ -630,6 +770,18 @@ final class ThreadManager {
         let result = (TokenCalibration(samples: samples), samples.count)
         calibrations[modelID] = result
         return result
+    }
+
+    private func fetchRecord(_ id: UUID) -> RequestRecord? {
+        var descriptor = FetchDescriptor<RequestRecord>(predicate: #Predicate { $0.stableID == id })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private func attempt(_ id: UUID) -> ProofAttempt? {
+        var descriptor = FetchDescriptor<ProofAttempt>(predicate: #Predicate { $0.stableID == id })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     private func fetchMessage(_ id: UUID) -> Message? {

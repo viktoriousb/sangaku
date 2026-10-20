@@ -12,13 +12,7 @@ struct LayoutTests {
 
     private func environment<V: View>(_ view: V) -> some View {
         view
-            .environment(\.mathRenderer, fixture.state.renderer)
-            .environment(\.problemManager, fixture.state.problems)
-            .environment(\.saveScheduler, fixture.state.saves)
-            .environment(\.threadManager, fixture.state.threads)
-            .environment(\.statementGraph, fixture.state.graph)
-            .environment(\.reviewManager, fixture.state.reviews)
-            .environment(\.credentialManager, fixture.state.credentials)
+            .appEnvironment(fixture.state)
             .environment(\.mathContext, fixture.mathContext)
             .modelContainer(fixture.state.container)
     }

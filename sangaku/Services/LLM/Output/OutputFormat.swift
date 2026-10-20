@@ -6,12 +6,16 @@ nonisolated enum OutputFormat: Hashable, Sendable {
     case attempt
     /// A referee's verdict on each attempt, identified by the letter of the slot that wrote it, and a summary.
     case refereeVerdicts(letters: [String])
+    /// Two attempts' steps paired by what they establish, each pair judged, and a summary. The attempts are named
+    /// "Attempt 1" and "Attempt 2" only; a step number of 0 means none, an empty phrase means none.
+    case alignment
 
     /// Recorded with the request's parameters.
     var tag: String {
         switch self {
         case .attempt: "proof-attempt@1"
         case .refereeVerdicts: "referee-verdicts@1"
+        case .alignment: "alignment@1"
         }
     }
 
@@ -40,6 +44,20 @@ nonisolated enum OutputFormat: Hashable, Sendable {
             "rationale":{"type":"string"},\#
             "gap_steps":{"type":"array","items":{"type":"integer"}},\#
             "outcome":{"type":"string","enum":["complete","gap"]}}}},\#
+            "summary":{"type":"string"}}}
+            """#
+        case .alignment:
+            #"""
+            {"type":"object","additionalProperties":false,"required":["rows","summary"],"properties":{\#
+            "rows":{"type":"array","items":{"type":"object","additionalProperties":false,\#
+            "required":["label","step_1","step_2","note","phrase_1","phrase_2","verdict"],"properties":{\#
+            "label":{"type":"string"},\#
+            "step_1":{"type":"integer"},\#
+            "step_2":{"type":"integer"},\#
+            "note":{"type":"string"},\#
+            "phrase_1":{"type":"string"},\#
+            "phrase_2":{"type":"string"},\#
+            "verdict":{"type":"string","enum":["equivalent","diverge","only_1","only_2"]}}}},\#
             "summary":{"type":"string"}}}
             """#
         }

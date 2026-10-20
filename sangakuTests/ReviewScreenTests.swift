@@ -8,7 +8,7 @@ import Testing
 struct ReviewKeysTests {
     private func command(_ characters: String, typing: Bool = false, command: Bool = false, option: Bool = false,
                          control: Bool = false, shift: Bool = false) -> ReviewCommand? {
-        ReviewKeys.command(for: ReviewKeyInput(characters: characters, command: command, option: option,
+        ReviewKeys.command(for: ListKeyInput(characters: characters, command: command, option: option,
                                                control: control, shift: shift), isTyping: typing)
     }
 
@@ -34,7 +34,7 @@ struct ReviewKeysTests {
     @Test("A held key repeats J and K only, so a held 1, 2 or 3 marks once; the list listens for both cases")
     func repeats() {
         func held(_ key: String) -> ReviewCommand? {
-            ReviewKeys.command(for: ReviewKeyInput(characters: key, isRepeat: true), isTyping: false)
+            ReviewKeys.command(for: ListKeyInput(characters: key, isRepeat: true), isTyping: false)
         }
         #expect(held("j") == .next && held("k") == .previous)
         for key in ["1", "2", "3", "c"] { #expect(held(key) == nil, "\(key)") }
@@ -60,15 +60,15 @@ struct ReviewKeysTests {
         #expect(ReviewNavigation.move(.next, from: ids[2], in: ids) == ids[2])
         #expect(ReviewNavigation.move(.previous, from: ids[0], in: ids) == ids[0])
         #expect(ReviewNavigation.move(.next, from: UUID(), in: ids) == ids[0], "a step no longer listed")
-        #expect(ReviewNavigation.move(.next, from: nil, in: []) == nil)
+        #expect(ReviewNavigation.move(.next, from: nil, in: [UUID]()) == nil)
         #expect(ReviewNavigation.move(.mark(.correct), from: ids[1], in: ids) == ids[1])
     }
 }
 
 @Suite("Which attempt Review shows")
 struct ReviewAttemptChoiceTests {
-    private func option(_ minute: Double, _ outcome: RefereeOutcome? = nil) -> ReviewAttemptOption {
-        ReviewAttemptOption(id: UUID(), createdAt: Date(timeIntervalSinceReferenceDate: minute * 60),
+    private func option(_ minute: Double, _ outcome: RefereeOutcome? = nil) -> AttemptOption {
+        AttemptOption(id: UUID(), createdAt: Date(timeIntervalSinceReferenceDate: minute * 60),
                             author: nil, stepCount: 3, isPartial: false, standingOutcome: outcome)
     }
 
@@ -76,7 +76,7 @@ struct ReviewAttemptChoiceTests {
     func rule() {
         let old = option(1, .gap), complete = option(2, .complete), unrefereed = option(3), newest = option(4)
         let options = [old, complete, unrefereed, newest]
-        func resolve(_ selection: ReviewSelection, theorem: UUID? = nil, among: [ReviewAttemptOption]? = nil) -> UUID? {
+        func resolve(_ selection: ReviewSelection, theorem: UUID? = nil, among: [AttemptOption]? = nil) -> UUID? {
             ReviewAttemptChoice.resolve(selection, among: among ?? options, theoremSourceAttemptID: theorem)
         }
         #expect(resolve(ReviewSelection(attemptID: unrefereed.id)) == unrefereed.id)
@@ -94,11 +94,11 @@ struct ReviewAttemptChoiceTests {
     func options() throws {
         let fixture = PreviewFixtures.make()
         let messages = fixture.mainBranch.sortedMessages
-        let options = ReviewAttemptOption.make(messages: messages, live: [])
+        let options = AttemptOption.make(messages: messages, live: [])
         #expect(options.map(\.id) == [fixture.attemptA.stableID, fixture.attemptB.stableID])
         #expect(options.map(\.standingOutcome) == [.complete, .gap])
         #expect(options.map(\.stepCount) == [6, 5])
-        #expect(ReviewAttemptOption.make(messages: messages, live: [fixture.messageB.stableID]).map(\.id)
+        #expect(AttemptOption.make(messages: messages, live: [fixture.messageB.stableID]).map(\.id)
                 == [fixture.attemptA.stableID])
     }
 }
@@ -243,13 +243,7 @@ struct ReviewLayoutTests {
 
     private func environment<V: View>(_ view: V) -> some View {
         view
-            .environment(\.mathRenderer, fixture.state.renderer)
-            .environment(\.problemManager, fixture.state.problems)
-            .environment(\.saveScheduler, fixture.state.saves)
-            .environment(\.threadManager, fixture.state.threads)
-            .environment(\.statementGraph, fixture.state.graph)
-            .environment(\.reviewManager, fixture.state.reviews)
-            .environment(\.credentialManager, fixture.state.credentials)
+            .appEnvironment(fixture.state)
             .environment(\.mathContext, fixture.mathContext)
             .modelContainer(fixture.state.container)
     }
@@ -270,7 +264,7 @@ struct ReviewLayoutTests {
             #expect(size.width <= width, "step \(step.index) current")
         }
         let graph = fixture.state.graph.state(for: fixture.problem)
-        let header = ReviewHeader(theorem: graph.pinned, options: ReviewAttemptOption.make(messages: fixture.mainBranch.sortedMessages, live: []),
+        let header = ReviewHeader(theorem: graph.pinned, options: AttemptOption.make(messages: fixture.mainBranch.sortedMessages, live: []),
                                   chosen: state.attemptID, progress: state.progress,
                                   legend: [authors.mark(of: .model(fixture.slotA.slotID))], authors: authors,
                                   highlight: "Lem 3", onChoose: { _ in }, onClearHighlight: {})
@@ -301,7 +295,7 @@ struct ReviewWordingTests {
     @Test("Chips: who checked and when, open objections with who raised them, and the referee's word on this version")
     func chips() {
         func labels(_ index: Int) -> [String] { ReviewWording.chips(for: step(index), authors: authors).map(\.label) }
-        let time = { (index: Int) in ReviewTime.text(step(index).standing.latestCheckAt!) }
+        let time = { (index: Int) in ShortTime.text(step(index).standing.latestCheckAt!) }
         #expect(labels(1) == ["You · \(time(1))", "Also checked by C"])
         #expect(labels(2) == ["MK · \(time(2))", "Also checked by C"])
         #expect(labels(3) == ["You · \(time(3))", "C's check covered an earlier version"])
@@ -311,18 +305,18 @@ struct ReviewWordingTests {
 
     @Test("Provenance, objection, dismissal and history lines name people and versions")
     func lines() throws {
-        let revisedAt = ReviewTime.text(try #require(step(3).provenance.current).createdAt)
+        let revisedAt = ShortTime.text(try #require(step(3).provenance.current).createdAt)
         #expect(ReviewWording.provenanceLine(step(3), authors: authors)
                 == "Written by Model A, revised by You · \(revisedAt) (version 2)")
         #expect(ReviewWording.provenanceLine(step(1), authors: authors) == "Written by Model A")
         var objection = try #require(step(5).standing.openObjections.first)
         #expect(ReviewWording.objectionLine(objection, authors: authors)
-                == "? Unclear, raised by You · \(ReviewTime.text(objection.createdAt))")
+                == "? Unclear, raised by You · \(ShortTime.text(objection.createdAt))")
         objection.dismissedByID = fixture.mk.stableID
         objection.dismissalReason = "The parity argument closes it."
         objection.dismissedAt = objection.createdAt
         #expect(ReviewWording.dismissalLine(objection, authors: authors)
-                == "? Unclear by You, dismissed by MK · \(ReviewTime.text(objection.createdAt)): The parity argument closes it.")
+                == "? Unclear by You, dismissed by MK · \(ShortTime.text(objection.createdAt)): The parity argument closes it.")
         let history = step(3).history.map { ReviewWording.historyLine($0, step: step(3), authors: authors) }
         #expect(history.first?.hasPrefix("✓ Correct by You") == true)
         #expect(history.contains { $0.hasPrefix("Version 2, current, by You") && $0.hasSuffix("text changed") })
@@ -360,7 +354,7 @@ struct ReviewWordingTests {
         var objection = try #require(step(5).standing.openObjections.first)
         objection.withdrawnAt = objection.createdAt
         #expect(ReviewWording.withdrawalLine(objection, authors: authors)
-                == "? Unclear by You, withdrawn · \(ReviewTime.text(objection.createdAt))")
+                == "? Unclear by You, withdrawn · \(ShortTime.text(objection.createdAt))")
         #expect(ReviewWording.withdrawalAnnouncement(objection, step: step(5))
                 == "Your unclear on step 5 withdrawn; it no longer blocks the step")
         let check = try #require(step(1).standing.checks.first)

@@ -253,13 +253,7 @@ struct PreviewSmokeTests {
     /// `TEST_RUNNER_SANGAKU_PREVIEW_DIR` to xcodebuild), also writes it as a PNG for a visual check.
     private func render(_ name: String, width: Double, @ViewBuilder _ view: () -> some View) throws {
         let content = view()
-            .environment(\.mathRenderer, fixture.state.renderer)
-            .environment(\.problemManager, fixture.state.problems)
-            .environment(\.saveScheduler, fixture.state.saves)
-            .environment(\.threadManager, fixture.state.threads)
-            .environment(\.statementGraph, fixture.state.graph)
-            .environment(\.reviewManager, fixture.state.reviews)
-            .environment(\.credentialManager, fixture.state.credentials)
+            .appEnvironment(fixture.state)
             .environment(\.mathContext, fixture.mathContext)
             .modelContainer(fixture.state.container)
             .frame(width: width)
@@ -341,7 +335,7 @@ struct PreviewSmokeTests {
         let authors = AuthorDirectory(problem: fixture.problem, people: [fixture.you, fixture.mk], catalog: .standard)
         let state = fixture.state.reviews.state(of: fixture.attemptA)
         let graph = fixture.state.graph.state(for: fixture.problem)
-        let options = ReviewAttemptOption.make(messages: fixture.mainBranch.sortedMessages, live: [])
+        let options = AttemptOption.make(messages: fixture.mainBranch.sortedMessages, live: [])
         for (name, scheme) in [("review-page", ColorScheme.light), ("review-page-dark", .dark)] {
             try render(name, width: 860) {
                 VStack(alignment: .leading, spacing: 18) {

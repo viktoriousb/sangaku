@@ -17,7 +17,7 @@ struct CommentThread: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     AuthorBadge(text: mark.text, colorToken: mark.colorToken)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text([mark.name, ReviewTime.text(comment.createdAt), step.versionLabel(of: comment.revisionID).map { "on \($0)" }]
+                        Text([mark.name, ShortTime.text(comment.createdAt), step.versionLabel(of: comment.revisionID).map { "on \($0)" }]
                             .compactMap { $0 }.joined(separator: " · "))
                             .font(.caption.weight(.medium))
                         MathText(comment.body)
@@ -96,7 +96,7 @@ private struct CommentComposer: View {
             try reviews.comment(draft.text, on: step.id, revision: revision)
             draft.text = ""
             error = nil
-            AccessibilityNotification.Announcement("Comment added to step \(step.index)").post()
+            VoiceOver.announce("Comment added to step \(step.index)")
         } catch {
             self.error = error.message
         }

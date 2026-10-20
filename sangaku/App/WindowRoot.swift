@@ -91,13 +91,7 @@ private struct SaveErrorBanner: View {
 #Preview("Window, empty") {
     let state = AppState(storage: .inMemory)
     WindowRoot()
-        .environment(\.mathRenderer, state.renderer)
-        .environment(\.problemManager, state.problems)
-        .environment(\.saveScheduler, state.saves)
-        .environment(\.threadManager, state.threads)
-        .environment(\.statementGraph, state.graph)
-        .environment(\.reviewManager, state.reviews)
-        .environment(\.credentialManager, state.credentials)
+        .appEnvironment(state)
         .modelContainer(state.container)
         .frame(width: 1100, height: 700)
 }
@@ -140,8 +134,7 @@ private struct WorkspaceContent: View {
             case .thread:
                 ThreadView(problem: problem, window: window)
             case .compare:
-                PlaceholderView(title: "Compare", systemImage: "rectangle.split.2x1",
-                                detail: "Aligned proof diffs arrive in Milestone 6.")
+                CompareView(problem: problem, window: window)
             case .review:
                 ReviewView(problem: problem, window: window)
             case .branches:

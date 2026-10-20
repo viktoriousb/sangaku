@@ -175,9 +175,9 @@ struct OutputFormatTests {
         }
     }
 
-    @Test("Both schemas are valid JSON, closed, with every property required")
+    @Test("Every schema is valid JSON, closed, with every property required")
     func schemasAreClosed() throws {
-        for format in [OutputFormat.attempt, .refereeVerdicts(letters: ["A", "B"])] {
+        for format in [OutputFormat.attempt, .refereeVerdicts(letters: ["A", "B"]), .alignment] {
             let schema = try JSONSerialization.jsonObject(with: Data(format.schemaJSON.utf8))
             lint(schema)
         }
@@ -235,5 +235,8 @@ struct OutputFormatTests {
         #expect(referee.versionTag == "referee@1")
         #expect(referee.text.contains("never a check by a person"))
         #expect(PromptLibrary.bundled.prompt(for: .formalizer) == nil, "formalizers have no prompt yet")
+        let aligner = try #require(PromptLibrary.bundled.prompt(named: "aligner", role: .referee))
+        #expect(aligner.versionTag == "aligner@1")
+        #expect(aligner.text.contains("Never guess or name who wrote them"))
     }
 }

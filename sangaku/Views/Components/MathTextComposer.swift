@@ -15,7 +15,10 @@ struct ComposedMath {
 }
 
 enum MathTextComposer {
-    static func compose(_ source: String, renderer: MathRenderer?, context: MathContext) -> ComposedMath {
+    /// `mark` (UTF-16 offsets into `source`) is underlined and tinted where it can be: in prose and in formulas set as
+    /// text. A mark that would cut a formula is not drawn; the caller says it in words as well.
+    static func compose(_ source: String, renderer: MathRenderer?, context: MathContext,
+                        mark: Range<Int>? = nil) -> ComposedMath {
         var composed = ComposedMath()
         var parts: [Text] = []
         let joiner = TypographicMath.wordJoiner
@@ -27,19 +30,30 @@ enum MathTextComposer {
             if !parts.isEmpty { composed.blocks.append(.paragraph(join(parts))); parts = [] }
         }
 
-        for segment in ProseSegmenter.segments(source) {
+        let segments = (pieces(source, mark: mark) ?? [(source, false)]).flatMap { piece, marked in
+            ProseSegmenter.segments(piece).map { (segment: $0, marked: marked) }
+        }
+        for (segment, marked) in segments {
             switch segment {
             case .text(var prose):
                 composed.accessibilityText += prose
                 // Hold math to adjacent punctuation ("$p$," or "$3$-subgroup"): no line break between them.
                 if let first = prose.first, !first.isWhitespace { prose = joiner + prose }
                 if let last = prose.last, !last.isWhitespace { prose += joiner }
-                parts.append(Text(verbatim: prose))
+                if marked {
+                    var attributed = AttributedString(prose)
+                    attributed.underlineStyle = .single
+                    attributed.backgroundColor = ColorToken.delicateFill.color
+                    parts.append(Text(attributed))
+                } else {
+                    parts.append(Text(verbatim: prose))
+                }
             case .math(let latex, .inline):
                 let rendered = render(latex, renderer: renderer, context: context, style: .inline)
                 if case .source(let chip) = rendered { note(chip) }
                 composed.accessibilityText += spoken(rendered, latex: latex)
-                parts.append(inline(rendered, fontSize: context.fontSize))
+                let text = inline(rendered, fontSize: context.fontSize)
+                parts.append(marked ? text.underline() : text)
             case .math(let latex, .display):
                 flushParagraph()
                 let rendered = render(latex, renderer: renderer, context: context, style: .display)
@@ -55,6 +69,13 @@ enum MathTextComposer {
         }
         flushParagraph()
         return composed
+    }
+
+    /// The source cut at a mark (`KeyPhrase.pieces`), flagged marked or not. Nil where the cut would break a formula:
+    /// the mark is not drawn.
+    static func pieces(_ source: String, mark: Range<Int>?) -> [(String, Bool)]? {
+        guard let mark, let pieces = KeyPhrase.pieces(source, mark: mark) else { return nil }
+        return [(pieces[0], false), (pieces[1], true), (pieces[2], false)]
     }
 
     private static func render(_ latex: String, renderer: MathRenderer?, context: MathContext, style: MathStyle) -> RenderedMath {

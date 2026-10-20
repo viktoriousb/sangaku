@@ -137,6 +137,7 @@ private struct RefereeActions: View {
 
     @Environment(\.promoteSteps) private var promote
     @Environment(\.openReview) private var openReview
+    @Environment(\.openCompare) private var openCompare
 
     var body: some View {
         // Only attempts that were read as steps can be promoted from or reviewed.
@@ -152,6 +153,9 @@ private struct RefereeActions: View {
                 Button("Review Step by Step") { openReview?(ReviewTarget(attemptIDs: promotable)) }
                     .disabled(openReview == nil || promotable.isEmpty)
                     .help(promotable.isEmpty ? "No attempt was read as steps" : "Open these attempts in Review")
+                Button("Compare Attempts") { openCompare?(CompareTarget(attemptIDs: promotable)) }
+                    .disabled(openCompare == nil || promotable.count < 2)
+                    .help(promotable.count < 2 ? "Comparing needs two attempts read as steps" : "Set these attempts side by side, step by step")
             }
             Text("Adopting an attempt as the main line arrives with Milestone 7.")
                 .font(.caption)

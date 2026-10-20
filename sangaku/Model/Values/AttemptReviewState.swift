@@ -71,9 +71,8 @@ nonisolated struct AttemptReviewState: Hashable, Sendable {
         attemptID = attempt.id
         steps = attempt.steps.sorted { $0.index < $1.index }.compactMap { step in
             guard let standing = standings[step.id] else { return nil }
-            // The text a review binds to is the current revision's; the step's own copy is only a mirror of it.
-            return StepReview(id: step.id, index: step.index, text: step.current?.textLaTeX ?? step.text,
-                              establishes: step.current?.establishes ?? step.establishes, confidence: step.confidence,
+            return StepReview(id: step.id, index: step.index, text: step.currentText,
+                              establishes: step.currentEstablishes, confidence: step.confidence,
                               standing: standing, provenance: StepProvenance(revisions: step.revisions),
                               comments: step.comments, reviews: step.reviews)
         }

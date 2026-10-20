@@ -768,3 +768,131 @@ withdrawal lines and announcements.
 
 The spec's Reviews section and invariant 11 say a ✗ or ? closes only by a new revision or a person's dismissal with
 a reason. They should add the raiser's withdrawal. Not edited.
+
+## 2026-10-19: Milestone 6, Compare
+
+### What was built
+
+- **A pure comparison core** (`Model/Values/Compare`):
+  - `ComparisonState` derives the table on every read from three layers: a person's corrections (an append-only log
+    of pair, separate, judge and clear) over the model's rows over the pairing by label. Every step of both attempts
+    is in exactly one row; each row is equivalent, diverging, one-sided, not compared, or out of date.
+  - `LabelPairing` (the k-th step with a label in one attempt pairs with the k-th in the other), `RowOrder`,
+    `CompareSummary`, the differences filter (which hides only rows judged equivalent on the current text), and
+    `KeyPhrase`.
+  - Blind mode: `SideOrder` (which attempt is "Attempt 1", from the IDs alone), `CompareBlind`, `HoldsVerdict` and
+    `BlindShield` (withholds model-written text that names a model while blind).
+  - `ComparePairChoice`, `AlignerChoice`, `CompareLayoutMode` and `ThreadAgreement` (the thread's collapsed runs and
+    divergence).
+- **`AlignmentService`**: re-pair, separate, judge (on the revisions read) and clear, and the blind verdict, all in
+  the name of the person using the app; refusals change nothing.
+- **The alignment request.** `OutputFormat.alignment`, the aligner prompt (`aligner@1`), `AlignmentBasis` (what the
+  model is shown, and how its step numbers map back), `AlignmentParser` and `AlignmentMapper` (whole or nothing,
+  failing closed), the `.alignment` context purpose (both attempts ended, nothing else of the thread, "Attempt 1/2"
+  only), and `ThreadManager.align`/`alignPlan`. The record belongs to the comparison; stop, quit, delete and orphan
+  recovery handle it. The demo transport answers an alignment.
+- **Questions about a row.** `ThreadManager.ask` with `SendPlanner.readyQuestion`: a repair request to the author of a
+  step, or a row to the referee, which answers with its own prompt (`referee-reply@1`) as a new message kind,
+  `refereeReply`, never a verdict. Both are linked to the attempts, so they are withheld wherever the attempts are.
+- **The Compare screen** (⌘2): title, the two attempts (pickers, or "Attempt 1 and Attempt 2" while blind), the
+  filter, blind mode, the summary chips, the alignment status with Align…, Stop and View Context; rows as four columns
+  from 680 points or as cards below, each with its steps (key phrase marked and spelled out), verdict chip, who decided
+  it, the note, and a menu (pair with, separate, mark equivalent or diverging, clear my judgement); drag a step onto a
+  row of the other attempt to pair them; J and K between rows; rotors for diverging, unmatched and out-of-date rows;
+  the resolve panel (the blind verdict, repair and row-to-referee requests shown before they are sent, Adopt and the
+  counterexample search disabled with a caption); the Align and question sheets.
+- **Blind chrome.** While blind in Compare, the toolbar's model chips and the proof-structure inspector are hidden.
+- **The thread.** A fan-out's later attempt collapses runs of matching steps ("Steps 1–4 match A's"), a banner names
+  the row where the attempts part ways and opens Compare, and the referee message has "Compare Attempts".
+- **`MathText` marks**: a range underlined and tinted where it keeps every formula whole; unmarked text is unchanged.
+- **Also:** one `appEnvironment` modifier replaces six hand-kept lists of injected managers; `SeededGenerator` is
+  shared by the property tests.
+- **Fixture.** C's alignment of A and B at 11:16 (after the revisions): rows 1–4 equivalent, row 5 diverging with its
+  key phrases, step 6 only in A.
+
+### Decisions
+
+Recorded in `docs/DECISIONS.md` (2026-10-19). The existing store opened with the new schema without a reset.
+
+**Spec drift to reconcile** (not edited): the domain model's `Alignment` row (corrections, blind verdict, requests,
+summary), `RequestRecord.alignment`, and the message kind `refereeReply`; blind mode's "until the user records a
+verdict" is "which attempt holds", per comparison.
+
+### Tests
+
+450 tests in 80 suites, all passing. Milestone 6 added 75, 13 of them with the review's fixes:
+- **The core:** label pairing, sanitising the model's rows (unknown and reused steps, odd verdicts), corrections over
+  two different model layers, clearing, staleness on both layers and on unrecorded revisions, unreadable layers, the
+  filter, row order, and 200 random cases where every step is in exactly one row, a person's pair always appears and a
+  separated pair never does.
+- **Blind mode (invariant 9):** side order symmetric, stable and about even; the reveal rule; `BlindShield` on unsafe
+  and safe texts; nothing Compare says while hidden names a model, a slot or a provider (labels, aligner names, picker
+  labels, run status, a failed alignment's error, blockers); `CompareIdentity` holds no author while hidden, is built
+  hidden until a verdict, readable or not, is stored, and withholds a model's label in favour of what a step
+  establishes.
+- **The store:** the example's comparison read either way round; a revision making a row out of date; deleting the
+  comparison changes no status (invariant 1); unreadable JSON; cascades; an unknown blind verdict.
+- **`AlignmentService`:** re-pairing, judging on the revisions read and refused on a revised step, refusals changing
+  nothing, steps given either way round, the comparison created on first write, the blind verdict once with who and
+  when, and observation.
+- **The request:** the schema closed, the prompt tags, the parser whole or nothing, the mapper's rules; the context
+  (only the two attempts, no letters), unfinished and stray attempts refused (invariant 4), the provider policy
+  (invariant 15), and only a referee-role slot aligning.
+- **The lifecycle:** a run stored on the comparison and nowhere else with corrections kept; no review, verdict or status
+  changed (invariant 1); stopped, failed and unreadable answers storing nothing; refusals sending nothing; quitting,
+  deleting the problem and orphans; the demo transport end to end.
+- **Questions about a row:** a repair as an ordinary reply that changes no step, a referee's row answer that writes no
+  verdict, both excluded from later independent attempts, and refusals.
+- **Screen:** row styles distinct without colour and never a check or a refutation; the words; drag pairing and the
+  drag type (never text); key phrases that would cut a formula, swap prose and math, or cut `\(` from its formula
+  (invariant 16), and a canonically equivalent match; the thread's runs and banner, and flagged steps kept open;
+  window state and the J/K keys; stacked rows and the resolve panel fitting 260 points; Compare at a minimum window;
+  smoke renders of the table (light and dark), blind cards, the header and resolve panel shown and blind, both
+  sheets, the fan-out with its banner and the empty state.
+- **Added at review:** separating, or pairing elsewhere, withdraws a judgement; a model's "no counterpart" and an
+  out-of-date reading's note and marks; a person's pairing, separating and judging changing no review, standing or
+  status (invariant 1); a step with no revision refused; an unreadable stored verdict never written over; `align`
+  refusing a prover, an author and one attempt twice, orienting a reversed pair, and refused while attempts stream.
+
+### Checked in the running app
+
+Launched with `-SangakuFixture YES -SangakuStartView compare`: the four-column table with the summary chips, the
+diverging row highlighted, both key phrases underlined in place, "No matching step" for step 6, the alignment status,
+the J/K legend and the resolve panel; after the review's fixes, again, with the built Info.plist declaring
+`local.sangaku.step`. Blind mode, the sheets, drag and drop, J and K, the Compare menu and the rotors were not tried
+by hand.
+
+### Review
+
+Three reviewers (trust invariants, correctness, conventions) found three high-severity issues, nine medium and a
+set of low ones and test gaps; all were fixed.
+- **High.**
+  - Blind mode (invariant 9): row labels, rotor entries, a failed alignment's provider error and the Align sheet's
+    blockers could name a model; the hide-or-show decision was made in five places. Now one value,
+    `CompareIdentity`, built by one function, carries every name Compare shows, and everything a model or provider
+    wrote passes `BlindShield`.
+  - Key phrases (invariant 16): a phrase cutting a formula was spelled out as raw LaTeX, or with prose set as math.
+    `KeyPhrase.locate` now accepts a phrase only where every formula stays whole, and measures the mark from the
+    matched text.
+  - Accessibility: no focus ring on the row list before a row is current; a step cell's label hid its text from
+    VoiceOver.
+- **Medium.** Flagged steps folded into the thread's matching runs; an out-of-date model reading's note and marks,
+  and one-sided rows that ignored revisions; `align` trusting the caller's order and checking neither the pair nor
+  the aligner; the aligner's left-out context not shown (invariant 5); notices neither announced nor placed by their
+  control, and fewer VoiceOver actions than documented; a judgement on a step with no revision, an unreadable
+  verdict that kept Compare blind, a judgement returning after separation; the row handler reading its render, the
+  filter re-deriving the comparison, and a drag payload any text field accepted.
+- **Low.** Logic moved out of the view; dead error cases and members removed; one estimate wording, one "current
+  text of a step", one announcement helper, one caption size, one provider check; the think-time taken from the
+  composer; `ShortTime`, `ListKeyInput`, `ListNavigation` and `AttemptOption` named for what they are; a Compare
+  menu and a J/K legend; partial attempts marked; stale and doubled doc comments corrected; dark and sheet previews.
+
+### Deferred
+
+- The partial-attempt progress wording (from Milestone 5), to Milestone 8.
+- Trying blind mode, the sheets, drag and drop, the keys, the Compare menu and the rotors by hand.
+
+### Next
+
+Milestone 7, Branches: fork, dead ends with reasons in context, cherry-pick, and adopting an attempt as the main line
+(the referee's and Compare's Adopt).

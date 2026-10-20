@@ -19,8 +19,10 @@ struct FanOutBlock: View {
     let onViewContext: (RequestRecord) -> Void
 
     @Environment(\.threadManager) private var threads
+    @Environment(\.openCompare) private var openCompare
 
     var body: some View {
+        let agreement = FanOutAgreement.read(attempts: attempts, problem: problem, live: live, authors: authors)
         let header = FanOutHeader(
             visibility: fanOut.visibility,
             attempts: attempts.map { attempt in
@@ -43,9 +45,21 @@ struct FanOutBlock: View {
             EqualColumnsLayout {
                 ForEach(attempts, id: \.stableID) { attempt in
                     AttemptCard(message: attempt, stream: live[attempt.stableID], authors: authors,
+                                matches: agreement?.matches[attempt.stableID],
                                 onViewContext: onViewContext,
                                 onStop: { threads?.stop(messageID: attempt.stableID) })
                 }
+            }
+            if let agreement, let row = agreement.divergence {
+                FlowLayout(spacing: 10, lineSpacing: 6) {
+                    Label(CompareWording.divergence(row), systemImage: "arrow.triangle.branch")
+                        .font(.callout)
+                    Button("Open Compare") { openCompare?(CompareTarget(attemptIDs: agreement.attemptIDs)) }
+                        .disabled(openCompare == nil)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .statusFrame(CompareRowStyle.style(for: .diverge), cornerRadius: 8)
             }
             RefereeControl(fanOut: fanOut, problem: problem, branch: branch, running: run != nil,
                            refereed: refereeGaveVerdicts != nil, busy: busy, notice: notice)
@@ -70,6 +84,47 @@ struct FanOutBlock: View {
     private func letter(of attempt: Message) -> String {
         guard case .model(let slot) = attempt.author else { return "?" }
         return authors.letter(of: slot)
+    }
+}
+
+/// What the stored comparison of a fan-out's first two attempts says in the thread: where they part ways, and the runs
+/// of the later attempt's steps that match the earlier one's. Read only; nothing is requested. A step that asks for
+/// attention never collapses: one the referee listed as a gap, a delicate step or a guess, or one with an open
+/// objection or a re-check flag.
+struct FanOutAgreement {
+    /// Runs to collapse, by attempt message, with the letter of the attempt they match.
+    var matches: [UUID: MatchedRuns] = [:]
+    var divergence: CompareRow?
+    /// The two attempts compared, for opening Compare.
+    var attemptIDs: [UUID] = []
+
+    static func read(attempts: [Message], problem: Problem, live: [UUID: MessageStream],
+                     authors: AuthorDirectory) -> FanOutAgreement? {
+        let finished = attempts.filter { live[$0.stableID] == nil && !($0.proofAttempt?.steps ?? []).isEmpty }
+        guard finished.count >= 2, let earlier = finished[0].proofAttempt, let later = finished[1].proofAttempt,
+              problem.alignment(between: earlier.stableID, and: later.stableID) != nil else { return nil }
+        let people = Set(authors.profiles.keys)
+        let state = ComparisonState.read(earlier, later, in: problem, people: people)
+        let side: ThreadAgreement.Side = state.first.id == later.stableID ? .first : .second
+        var agreement = FanOutAgreement(divergence: ThreadAgreement.firstDivergence(state.rows),
+                                        attemptIDs: [earlier.stableID, later.stableID])
+        let runs = ThreadAgreement.collapsedRuns(state.rows, side: side, keepOpen: flagged(later, people: people))
+        if !runs.isEmpty, case .model(let slot) = finished[0].author {
+            agreement.matches[finished[1].stableID] = MatchedRuns(runs: runs, other: authors.letter(of: slot))
+        }
+        return agreement
+    }
+
+    /// The step numbers of an attempt that must stay in view.
+    private static func flagged(_ attempt: ProofAttempt, people: Set<UUID>) -> Set<Int> {
+        let standing = attempt.standingVerdict
+        let gaps = standing?.outcome == .gap ? Set(standing?.gapStepIndices ?? []) : []
+        let standings = StepStandings.standings(of: attempt.sortedSteps, people: people)
+        return gaps.union(attempt.sortedSteps.filter { step in
+            let review = standings[step.stableID]
+            return step.confidence == .delicate || step.confidence == .guess
+                || !(review?.openObjections.isEmpty ?? true) || review?.recheck != nil
+        }.map(\.index))
     }
 }
 

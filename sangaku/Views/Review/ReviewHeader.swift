@@ -5,7 +5,7 @@ import SwiftUI
 /// stand for.
 struct ReviewHeader: View {
     let theorem: StatementNode?
-    let options: [ReviewAttemptOption]
+    let options: [AttemptOption]
     let chosen: UUID
     let progress: ReviewProgress
     let legend: [AuthorDirectory.AuthorMark]
@@ -69,8 +69,8 @@ struct ReviewHeader: View {
     }
 
     /// "Model A · 11:02 · 6 steps", marked when partial.
-    private func label(_ option: ReviewAttemptOption) -> String {
-        [authors.name(of: option.author), ReviewTime.text(option.createdAt), Prose.count(option.stepCount, "step"),
+    private func label(_ option: AttemptOption) -> String {
+        [authors.name(of: option.author), ShortTime.text(option.createdAt), Prose.count(option.stepCount, "step"),
          option.isPartial ? "partial" : nil]
             .compactMap { $0 }
             .joined(separator: " · ")

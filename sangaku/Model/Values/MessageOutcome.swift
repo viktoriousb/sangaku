@@ -44,6 +44,15 @@ nonisolated enum MessageOutcome: Hashable, Sendable {
     }
 }
 
+extension RequestRecord {
+    /// How a request with no message of its own (an alignment) ended.
+    var outcome: MessageOutcome {
+        MessageOutcome.resolve(isStreaming: false, interrupted: false, hasRequest: true, finished: finishedAt != nil,
+                               stopReason: stopReason, stopCategory: stopCategory, errorKind: errorKind,
+                               errorMessage: errorMessage)
+    }
+}
+
 extension Message {
     func outcome(isStreaming: Bool) -> MessageOutcome {
         MessageOutcome.resolve(isStreaming: isStreaming, interrupted: interrupted, hasRequest: request != nil,

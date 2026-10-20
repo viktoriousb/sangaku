@@ -25,6 +25,7 @@ struct ThreadView: View {
             .frame(maxWidth: .infinity)
             .environment(\.promoteSteps, PromoteStepsAction(presenter: presenter) { promotion = $0 })
             .environment(\.openReview, OpenReviewAction(presenter: presenter) { window.openReview($0) })
+            .environment(\.openCompare, OpenCompareAction(presenter: presenter) { window.openCompare($0) })
         }
         .sheet(item: $promotion) { target in
             // The new statement is shown, selected, in the proof-structure inspector.

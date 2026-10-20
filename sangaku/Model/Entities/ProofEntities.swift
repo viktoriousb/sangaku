@@ -60,6 +60,10 @@ extension SangakuSchemaV1 {
         var latestRevision: StepRevision? {
             (revisions ?? []).max { ($0.createdAt, $0.stableID.uuidString) < ($1.createdAt, $1.stableID.uuidString) }
         }
+
+        /// The current revision's text and label. The step's own copies only mirror them, for a step with none.
+        var currentText: String { latestRevision?.textLaTeX ?? textLaTeX }
+        var currentEstablishes: String { latestRevision?.establishes ?? establishes }
     }
 
     @Model final class StepRevision {
@@ -160,14 +164,32 @@ extension SangakuSchemaV1 {
         }
     }
 
-    /// Two attempts' steps paired by what they establish. Attempts are referenced by stable ID.
+    /// The comparison of two attempts, by stable ID: side 1 is `attemptAID` ("Attempt 1"), fixed by `SideOrder` when
+    /// the comparison is made. It keeps three layers apart: the model's last good rows, a person's corrections and
+    /// the person's blind verdict. The table is derived from them on every read (`ComparisonState`).
     @Model final class Alignment {
         var stableID: UUID = UUID()
         var createdAt: Date = Date.now
         var attemptAID: UUID?
         var attemptBID: UUID?
+        /// The model's rows from its last readable answer. Replaced whole by a new answer, never edited.
         var rowsJSON: Data?
+        /// Set once a person has corrected the comparison (`correctionsJSON` is not empty).
         var correctedByUser: Bool = false
+        /// A person's corrections, in the order made (`AlignmentCorrection`). Never touched by a model's answer.
+        var correctionsJSON: Data?
+        /// The request whose answer `rowsJSON` holds, the slot that gave it, and its summary.
+        var modelRunID: UUID?
+        var alignerSlotID: UUID?
+        var modelSummary: String = ""
+        /// The person's blind verdict: which attempt holds (`HoldsVerdict`), who said so, and when. Recording it
+        /// reveals the authors of this comparison (invariant 9). It changes no review, check or status.
+        var holdsRaw: String?
+        var holdsByID: UUID?
+        var holdsAt: Date?
+        /// The alignment requests made for this comparison, with what each was sent.
+        @Relationship(deleteRule: .cascade, inverse: \RequestRecord.alignment)
+        var requests: [RequestRecord]? = []
         var problem: Problem?
 
         init(attemptAID: UUID? = nil, attemptBID: UUID? = nil) {
@@ -175,9 +197,26 @@ extension SangakuSchemaV1 {
             self.attemptBID = attemptBID
         }
 
-        var rows: [AlignmentRow] {
-            get { JSONColumn.decode([AlignmentRow].self, from: rowsJSON) ?? [] }
-            set { rowsJSON = JSONColumn.encode(newValue) }
+        /// The model's rows; nil when none are stored or they cannot be read (see `rowsAreReadable`).
+        var rows: [AlignmentRow]? {
+            get { JSONColumn.decode([AlignmentRow].self, from: rowsJSON) }
+            set { rowsJSON = newValue.flatMap { JSONColumn.encode($0) } }
         }
+
+        /// Rows stored but unreadable: the comparison falls back to the pairing by label and says so.
+        var rowsAreReadable: Bool { rowsJSON == nil || rows != nil }
+
+        var corrections: [AlignmentCorrection] {
+            get { JSONColumn.decode([AlignmentCorrection].self, from: correctionsJSON) ?? [] }
+            set { correctionsJSON = JSONColumn.encode(newValue) }
+        }
+
+        /// Corrections stored but unreadable: they are not shown, and nothing writes over them.
+        var correctionsAreReadable: Bool {
+            correctionsJSON == nil || JSONColumn.decode([AlignmentCorrection].self, from: correctionsJSON) != nil
+        }
+
+        /// Nil while no verdict is recorded, and for a stored value that is not a known verdict.
+        var holds: HoldsVerdict? { holdsRaw.flatMap(HoldsVerdict.init(rawValue:)) }
     }
 }

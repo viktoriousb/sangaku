@@ -17,6 +17,8 @@ nonisolated enum SendBlocker: Error, Hashable, Sendable {
     case recipient(letter: String, ContextError)
     /// The slot a request was meant for no longer exists.
     case slotMissing
+    /// Compare refuses the pair or the aligner.
+    case compare(CompareError)
 
     var message: String {
         switch self {
@@ -31,6 +33,7 @@ nonisolated enum SendBlocker: Error, Hashable, Sendable {
         case .slotCannotReceive(let letter, let role): "Model \(letter) is a \(role.rawValue) and cannot take this request."
         case .recipient(let letter, let error): "Model \(letter): \(error.message)"
         case .slotMissing: "The model slot this request was for no longer exists."
+        case .compare(let error): error.message
         }
     }
 }
@@ -145,10 +148,16 @@ nonisolated struct ReadySend: Sendable {
     /// The slot a problem's first send creates.
     let newSlot: ProblemSnapshot.SlotDigest?
     let effort: ThinkingEffort
+    /// The messages the prompt is about, for a question about attempts: a later independent fan-out never sees it.
+    let promptDerivedFromIDs: [UUID]
+    /// The kind of a prose reply: a prover's, or a referee's answer to a question.
+    let replyKind: MessageKind
 
     fileprivate init(kind: SendPlan.Kind, text: String, promptID: UUID, promptCreatedAt: Date, fanOutID: UUID?,
                      referee: ProblemSnapshot.SlotDigest?, members: [Member], newSlot: ProblemSnapshot.SlotDigest?,
-                     effort: ThinkingEffort) {
+                     effort: ThinkingEffort, promptDerivedFromIDs: [UUID] = [], replyKind: MessageKind = .reply) {
+        self.promptDerivedFromIDs = promptDerivedFromIDs
+        self.replyKind = replyKind
         self.kind = kind
         self.text = text
         self.promptID = promptID
@@ -228,15 +237,31 @@ nonisolated enum SendPlanner {
         guard !text.isEmpty else { throw .emptyMessage }
         guard !request.busy else { throw .busy }
         for slot in selection.provers + (selection.referee.map { [$0] } ?? []) {
-            guard request.snapshot.allowedProviderIDs.contains(slot.providerID) else {
-                throw .providerNotAllowed(providerID: slot.providerID, providerName: env.registry.displayName(for: slot.providerID))
-            }
-            guard !env.providersWithoutKey.contains(slot.providerID) else {
-                throw .missingKey(providerName: env.registry.displayName(for: slot.providerID))
-            }
+            try checkProvider(of: slot, snapshot: request.snapshot, env: env)
         }
         if let referee = selection.referee { try checkReferee(referee, snapshot: request.snapshot, env: env) }
         return try prepareAll(selection, text: text, request: request, env: env)
+    }
+
+    /// One question to one slot from outside the composer (repairing a step, or refereeing one row of a comparison):
+    /// a prose exchange, with the same checks as a send. A referee-role slot answers with its own prompt, never with
+    /// a verdict.
+    static func readyQuestion(_ text: String, to slot: ProblemSnapshot.SlotDigest, about linked: [UUID],
+                              snapshot: ProblemSnapshot, effort: ThinkingEffort, busy: Bool, now: Date,
+                              env: PlannerEnvironment) throws(SendBlocker) -> ReadySend {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw .emptyMessage }
+        guard !busy else { throw .busy }
+        try checkProvider(of: slot, snapshot: snapshot, env: env)
+        let isReferee = slot.role == .referee
+        let prepared = try RequestPreparer.prepare(
+            RequestSpec(slot: slot, kind: isReferee ? .refereeReply : .reply, pending: text, effort: effort),
+            snapshot: snapshot, env: env)
+        let member = ReadySend.Member(messageID: UUID(), slot: slot, createdAt: now.addingTimeInterval(0.001),
+                                      prepared: prepared)
+        return ReadySend(kind: .reply, text: text, promptID: UUID(), promptCreatedAt: now, fanOutID: nil, referee: nil,
+                         members: [member], newSlot: nil, effort: effort, promptDerivedFromIDs: linked,
+                         replyKind: isReferee ? .refereeReply : .reply)
     }
 
     // MARK: Preparation
@@ -297,17 +322,40 @@ nonisolated enum SendPlanner {
                          members: members, newSlot: newSlot, effort: request.effort)
     }
 
-    /// The referee cannot be built before the attempts exist; what can be checked now is.
-    private static func checkReferee(_ slot: ProblemSnapshot.SlotDigest, snapshot: ProblemSnapshot,
+    /// The problem allows the slot's provider (invariant 15) and a key is stored for it.
+    static func checkProvider(of slot: ProblemSnapshot.SlotDigest, snapshot: ProblemSnapshot,
+                              env: PlannerEnvironment) throws(SendBlocker) {
+        try checkAllowed(slot, snapshot: snapshot, env: env)
+        guard !env.providersWithoutKey.contains(slot.providerID) else {
+            throw .missingKey(providerName: env.registry.displayName(for: slot.providerID))
+        }
+    }
+
+    private static func checkAllowed(_ slot: ProblemSnapshot.SlotDigest, snapshot: ProblemSnapshot,
                                      env: PlannerEnvironment) throws(SendBlocker) {
         guard snapshot.allowedProviderIDs.contains(slot.providerID) else {
             throw .providerNotAllowed(providerID: slot.providerID, providerName: env.registry.displayName(for: slot.providerID))
         }
+    }
+
+    /// The referee cannot be built before the attempts exist; what can be checked now is. A missing key is only a
+    /// soft blocker while planning, so the estimate still shows.
+    private static func checkReferee(_ slot: ProblemSnapshot.SlotDigest, snapshot: ProblemSnapshot,
+                                     env: PlannerEnvironment) throws(SendBlocker) {
+        try checkAllowed(slot, snapshot: snapshot, env: env)
         guard env.prompts.prompt(for: .referee, structured: true) != nil else { throw .noRolePrompt(.referee) }
         guard env.registry.descriptors.contains(where: { $0.id == slot.providerID }) else { throw .noProvider(slot.providerID) }
     }
 
     // MARK: Estimates
+
+    /// The estimate for one request made outside a send (an alignment), as the composer shows one recipient's.
+    static func estimate(_ prepared: PreparedRequest, letter: String, env: PlannerEnvironment) -> SendPlan.Recipient {
+        let recipient = SendPlan.Recipient(letter: letter, slotID: prepared.spec.slot.id.rawValue,
+                                           model: prepared.resolution, cost: .unknown(modelID: prepared.spec.slot.modelID),
+                                           outputCeiling: outputCeiling(prepared.resolution, env: env))
+        return estimate(recipient, prepared, seesEarlierAttempts: false)
+    }
 
     private static func estimate(_ recipient: SendPlan.Recipient, _ prepared: PreparedRequest,
                                  seesEarlierAttempts: Bool) -> SendPlan.Recipient {

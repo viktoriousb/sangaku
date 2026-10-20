@@ -40,6 +40,16 @@ final class WindowState {
     var review = ReviewSelection()
     /// Review's current step: drawn with its own ring, and what the keys and the Review menu act on.
     var reviewStepID: UUID?
+    var compare = CompareSelection()
+    /// Compare's current row.
+    var compareRow: RowKey?
+    /// All rows or differences only. Kept across comparisons, and apart from them, so filtering re-derives nothing.
+    var compareFilter: CompareFilter = .all
+
+    /// While blind mode is on in Compare, the toolbar's model chips and the proof-structure inspector are hidden:
+    /// both name the models (invariant 9). Kept hidden after a verdict reveals one comparison, failing closed, until
+    /// blind mode is turned off.
+    var hidesModelChrome: Bool { blindMode && activeView == .compare }
 
     /// Selecting a problem resets the branch to its main line.
     func select(problem: Problem?) {
@@ -48,6 +58,8 @@ final class WindowState {
         selectedNodeID = nil
         review = ReviewSelection()
         reviewStepID = nil
+        compare = CompareSelection()
+        compareRow = nil
     }
 
     /// The branch shown: the one selected, else the problem's main line.
@@ -89,6 +101,24 @@ final class WindowState {
         review = ReviewSelection(candidateAttemptIDs: first.attemptID.map { [$0] } ?? [], highlightedStatementID: node.id)
         reviewStepID = first.stepID
         activeView = .review
+    }
+
+    /// Opens Compare on a fan-out's or referee message's attempts.
+    func openCompare(_ target: CompareTarget) {
+        compare = CompareSelection(candidateAttemptIDs: target.attemptIDs)
+        compareRow = nil
+        activeView = .compare
+    }
+
+    /// Picks the two attempts by hand; the current row starts over.
+    func chooseCompare(_ attemptIDs: [UUID]) {
+        guard compare.picked != attemptIDs else { return }
+        compare.picked = attemptIDs
+        compareRow = nil
+    }
+
+    func focusCompare(row key: RowKey?) {
+        if compareRow != key { compareRow = key }
     }
 
     /// Picks an attempt by hand; the current step starts over.

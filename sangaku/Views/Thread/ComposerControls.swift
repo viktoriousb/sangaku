@@ -196,18 +196,10 @@ struct EstimateLine: View {
     }
 
     static func text(_ plan: SendPlan) -> String {
-        var parts: [String] = []
-        if let tokens = plan.recipients.first?.totalTokens {
-            parts.append("≈ \(UsageFormat.tokens(tokens)) tokens in" + (plan.recipients.count > 1 ? " each" : ""))
-        }
-        switch plan.inputCost {
-        case .range(let low, let high): parts.append("≈ \(UsageFormat.cost(low))–\(UsageFormat.cost(high)) input")
-        case .single(let cost): parts.append("≈ \(UsageFormat.cost(cost)) input")
-        case .unknown(let modelID): parts.append("price unknown for \(modelID.isEmpty ? "this model" : modelID)")
-        }
-        if let ceiling = plan.outputCeiling {
-            parts.append("output at most \(UsageFormat.cost(ceiling))")
-        }
+        let unknownModel: String? = if case .unknown(let modelID) = plan.inputCost { modelID } else { nil }
+        var parts = UsageFormat.estimate(tokens: plan.recipients.first?.totalTokens, cost: plan.inputCost,
+                                         outputCeiling: plan.outputCeiling, each: plan.recipients.count > 1,
+                                         model: unknownModel)
         if let referee = plan.referee {
             parts.append("referee \(referee.letter)'s input once the attempts end")
         }
@@ -233,7 +225,7 @@ struct EstimateDetails: View {
                     GridRow {
                         Text("\(recipient.letter) · \(recipient.model.displayName)")
                         Text(recipient.totalTokens.map { "≈ \(UsageFormat.tokens($0))" + (recipient.seesEarlierAttempts ? " + earlier attempts" : "") } ?? "–")
-                        Text(Self.cost(recipient.cost))
+                        Text(UsageFormat.cost(recipient.cost) ?? "price unknown")
                         Text(recipient.outputCeiling.map(UsageFormat.cost) ?? "price unknown")
                     }
                 }
@@ -254,14 +246,6 @@ struct EstimateDetails: View {
         }
         .padding()
         .frame(width: 520)
-    }
-
-    private static func cost(_ cost: SendPlan.Cost) -> String {
-        switch cost {
-        case .range(let low, let high): "\(UsageFormat.cost(low))–\(UsageFormat.cost(high))"
-        case .single(let value): UsageFormat.cost(value)
-        case .unknown: "price unknown"
-        }
     }
 }
 

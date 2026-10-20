@@ -11,6 +11,10 @@ nonisolated enum OutputParsing {
         RefereeParser.parse(text)
     }
 
+    @concurrent static func alignment(_ text: String) async -> AlignmentReport? {
+        AlignmentParser.parse(text)
+    }
+
     @concurrent static func progress(_ text: String) async -> [ParsedStep] {
         AttemptParser.progress(text)
     }

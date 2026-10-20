@@ -36,13 +36,7 @@ struct SangakuApp: App {
     var body: some Scene {
         WindowGroup(id: "workspace") {
             WindowRoot()
-                .environment(\.mathRenderer, app.renderer)
-                .environment(\.problemManager, app.problems)
-                .environment(\.saveScheduler, app.saves)
-                .environment(\.threadManager, app.threads)
-                .environment(\.statementGraph, app.graph)
-                .environment(\.reviewManager, app.reviews)
-                .environment(\.credentialManager, app.credentials)
+                .appEnvironment(app)
                 .onAppear {
                     delegate.saves = app.saves
                     delegate.threads = app.threads
@@ -59,6 +53,7 @@ struct SangakuApp: App {
             SidebarCommands()
             SangakuCommands(problems: app.problems)
             ReviewCommands()
+            CompareCommands()
         }
 
         Settings {

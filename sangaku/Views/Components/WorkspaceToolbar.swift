@@ -9,7 +9,14 @@ struct WorkspaceToolbar: ToolbarContent {
             ViewSwitcher(window: window)
         }
         ToolbarItem(placement: .primaryAction) {
-            ModelSlotChips(window: window)
+            if window.hidesModelChrome {
+                Label("Models hidden in blind mode", systemImage: "eye.slash")
+                    .labelStyle(.titleAndIcon)
+                    .foregroundStyle(.secondary)
+                    .help("Blind mode hides which model wrote which attempt. Turn it off with ⌘⇧B.")
+            } else {
+                ModelSlotChips(window: window)
+            }
         }
         ToolbarItem(placement: .primaryAction) {
             Button(window.inspectorPresented ? "Hide Proof Structure" : "Show Proof Structure",

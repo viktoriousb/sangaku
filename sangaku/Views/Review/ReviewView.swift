@@ -41,7 +41,7 @@ private struct ReviewBranch: View {
 
     var body: some View {
         // Read once, not in every row.
-        let options = ReviewAttemptOption.make(messages: messages, live: Set((threads?.live ?? [:]).keys))
+        let options = AttemptOption.make(messages: messages, live: Set((threads?.live ?? [:]).keys))
         let personIDs = Set(people.map(\.stableID))
         let graphState = graph?.state(for: problem, people: personIDs)
         let chosen = ReviewAttemptChoice.resolve(window.review, among: options,
@@ -81,7 +81,7 @@ private enum ReviewSheet: Identifiable {
 private struct ReviewScreen: View {
     let attempt: ProofAttempt
     let state: AttemptReviewState
-    let options: [ReviewAttemptOption]
+    let options: [AttemptOption]
     let graph: StatementGraphState?
     let authors: AuthorDirectory
     let window: WindowState
@@ -186,7 +186,7 @@ private struct ReviewScreen: View {
 
     private func handle(_ press: KeyPress, current: UUID?) -> KeyPress.Result {
         let typing = focus != .list || TextEditingProbe.isTyping(firstResponder: NSApp.keyWindow?.firstResponder)
-        guard let command = ReviewKeys.command(for: ReviewKeyInput(press), isTyping: typing) else { return .ignored }
+        guard let command = ReviewKeys.command(for: ListKeyInput(press), isTyping: typing) else { return .ignored }
         run(command, in: state, current: current)
         return .handled
     }
@@ -212,10 +212,10 @@ private struct ReviewScreen: View {
             focus = .list
             notice = nil
         case .mark(let verdict):
-            guard let step = state[step: current] else { return announce("Choose a step first: J goes to the first.") }
+            guard let step = state[step: current] else { return VoiceOver.announce("Choose a step first: J goes to the first.") }
             mark(step, verdict)
         case .comment:
-            guard let step = state[step: current] else { return announce("Choose a step first: J goes to the first.") }
+            guard let step = state[step: current] else { return VoiceOver.announce("Choose a step first: J goes to the first.") }
             focus = .field(step.id)
         }
     }
@@ -234,7 +234,7 @@ private struct ReviewScreen: View {
             do {
                 try reviews?.withdraw(review.id)
                 notice = nil
-                announce(ReviewWording.withdrawalAnnouncement(review, step: step))
+                VoiceOver.announce(ReviewWording.withdrawalAnnouncement(review, step: step))
             } catch {
                 fail(step, error.message)
             }
@@ -243,7 +243,7 @@ private struct ReviewScreen: View {
             notice = nil
             if let undoManager, undoManager.canUndo {
                 undoManager.undo()
-                announce("Mark on step \(step.index) undone")
+                VoiceOver.announce("Mark on step \(step.index) undone")
             }
         case .dismiss(let step, let objection):
             sheet = .dismiss(step, objection)
@@ -275,7 +275,7 @@ private struct ReviewScreen: View {
                 canUndo = true
             }
             notice = ReviewNotice(stepID: step.id, row: ReviewRowNotice(message: message, isError: false, canUndo: canUndo))
-            announce(message)
+            VoiceOver.announce(message)
         } catch {
             fail(step, error.message)
         }
@@ -283,11 +283,7 @@ private struct ReviewScreen: View {
 
     private func fail(_ step: StepReview, _ message: String) {
         notice = ReviewNotice(stepID: step.id, row: ReviewRowNotice(message: message, isError: true))
-        announce(message)
-    }
-
-    private func announce(_ text: String) {
-        AccessibilityNotification.Announcement(text).post()
+        VoiceOver.announce(message)
     }
 }
 

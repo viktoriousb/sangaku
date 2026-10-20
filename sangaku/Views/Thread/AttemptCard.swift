@@ -7,6 +7,8 @@ struct AttemptCard: View {
     let message: Message
     let stream: MessageStream?
     let authors: AuthorDirectory
+    /// Runs of steps matching the other attempt, judged equivalent on the current text: shown collapsed.
+    var matches: MatchedRuns?
     let onViewContext: (RequestRecord) -> Void
     let onStop: () -> Void
 
@@ -28,7 +30,7 @@ struct AttemptCard: View {
             if let stream {
                 LiveAttemptBody(stream: stream)
             } else {
-                FinishedAttemptBody(message: message, authors: authors)
+                FinishedAttemptBody(message: message, authors: authors, matches: matches)
             }
             if stream == nil, outcome != .complete {
                 OutcomeLine(outcome: outcome, stopReason: message.request?.stopReason,
@@ -67,6 +69,7 @@ struct AttemptCard: View {
 private struct FinishedAttemptBody: View {
     let message: Message
     let authors: AuthorDirectory
+    var matches: MatchedRuns?
 
     var body: some View {
         let attempt = message.proofAttempt
@@ -89,11 +92,17 @@ private struct FinishedAttemptBody: View {
                         .foregroundStyle(StatusStyle.style(for: .proposed).ink.color)
                         .textSelection(.enabled)
                 }
+                let runs = matches?.runs ?? []
                 ForEach(steps) { step in
-                    StepRow(index: step.index, text: step.textLaTeX, establishes: step.establishes,
-                            confidence: step.confidence, gapListedBy: gaps.contains(step.index) ? referee : nil,
-                            promotion: attempt.map { PromotionTarget(attemptIDs: [$0.stableID], stepID: step.stableID) },
-                            review: attempt.map { ReviewTarget(attemptIDs: [$0.stableID], stepID: step.stableID) })
+                    if let run = runs.first(where: { $0.contains(step.index) }) {
+                        if step.index == run.lowerBound {
+                            MatchedSteps(title: CompareWording.matchRun(run, other: matches?.other ?? "the other attempt"),
+                                         steps: steps.filter { run.contains($0.index) }, attempt: attempt,
+                                         gaps: gaps, referee: referee)
+                        }
+                    } else {
+                        row(step, attempt: attempt, gaps: gaps, referee: referee)
+                    }
                 }
                 if state == .partial {
                     Label("Only the steps complete when it stopped are shown; everything that arrived is under Raw Output in View Context.",
@@ -105,10 +114,48 @@ private struct FinishedAttemptBody: View {
         }
     }
 
+    private func row(_ step: Step, attempt: ProofAttempt?, gaps: Set<Int>, referee: String) -> some View {
+        StepRow.forAttempt(step, attempt: attempt, gaps: gaps, referee: referee)
+    }
+
     static func summary(steps: [Step], unreadable: Bool, empty: Bool) -> String {
         if unreadable { return empty ? "No text arrived" : "Could not be read as steps; shown as written" }
         let delicate = steps.filter { $0.confidence == .delicate }.count
         return "\(Prose.count(steps.count, "step")) · \(delicate) delicate"
+    }
+}
+
+/// A run of steps matching the other attempt, collapsed to one line ("Steps 1–4 match A's") that opens to show them.
+private struct MatchedSteps: View {
+    let title: String
+    let steps: [Step]
+    let attempt: ProofAttempt?
+    let gaps: Set<Int>
+    let referee: String
+
+    @State private var isExpanded = false
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(steps) { StepRow.forAttempt($0, attempt: attempt, gaps: gaps, referee: referee) }
+            }
+            .padding(.top, 4)
+        } label: {
+            Text(title)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+extension StepRow {
+    /// A step of a finished attempt, which can be promoted and reviewed.
+    static func forAttempt(_ step: Step, attempt: ProofAttempt?, gaps: Set<Int>, referee: String) -> StepRow {
+        StepRow(index: step.index, text: step.textLaTeX, establishes: step.establishes, confidence: step.confidence,
+                gapListedBy: gaps.contains(step.index) ? referee : nil,
+                promotion: attempt.map { PromotionTarget(attemptIDs: [$0.stableID], stepID: step.stableID) },
+                review: attempt.map { ReviewTarget(attemptIDs: [$0.stableID], stepID: step.stableID) })
     }
 }
 

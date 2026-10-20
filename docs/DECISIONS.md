@@ -3,6 +3,88 @@
 Settled decisions, newest first. Each records what was decided, when, and why. Open questions stay in the spec's
 *Open decisions* list until they move here.
 
+## 2026-10-19: Milestone 6 architecture and choices
+
+- **Architecture.** The "clean" blueprint, chosen at the milestone's architecture step, with the blind-mode safeguards
+  of the "pragmatic" one.
+  - A pure core (`Model/Values/Compare`): `ComparisonState` derives the table on every read from three layers, a
+    person's corrections over the model's rows over the pairing by label. Every step of both attempts is in exactly
+    one row whatever the stored layers say (a property test over 200 random cases).
+  - `AlignmentService` is the only writer of a person's corrections and blind verdict. `ThreadManager` stays the only
+    owner of request tasks and of what requests write, so it stores a model's alignment rows when the request ends.
+  - Nothing reads a comparison to decide a status or a review: a comparison is a reading, never a check (invariant 1).
+- **Schema** (V1 edited in place, additive): on `Alignment`, `correctionsJSON`, `modelRunID`, `alignerSlotID`,
+  `modelSummary`, the blind verdict (`holdsRaw`, `holdsByID`, `holdsAt`) and `requests`; `RequestRecord.alignment`;
+  optional fields on `AlignmentRow` (note, key phrases, the revisions the model was shown); the message kind
+  `refereeReply`. A copy of the existing store opened with the new schema, without a reset.
+- **Rows: labels first, the model on request.** With nothing stored, steps pair by what they establish (normalised
+  labels, the k-th with the k-th) and the rows say "not compared": a label never makes a row equivalent. "Align…" asks
+  a model to pair and judge, with the estimate shown first. Chosen in the milestone's questions.
+- **A person's corrections survive a new alignment.** They are an append-only log (pair, separate, judge, clear),
+  replayed over whatever the model said. A separated pair never comes back by label. A judgement is given on the
+  revisions read; a step revised since makes the row out of date, and a step with no recorded revision cannot be
+  judged.
+- **Separating withdraws a judgement.** Separating two steps, or pairing either with another step, withdraws the
+  person's judgement of them: paired again, they start unjudged. Chosen at the milestone's review.
+- **Out of date.** A row judged on a revision a step no longer has is "out of date": never counted as equivalent, never
+  collapsed in the thread. The model's note and key phrases are shown only while its reading covers both steps' text,
+  even on a row a person has since judged. A model's "no counterpart" goes out of date when its step is revised; a
+  person's separation does not. An unrecorded revision counts as out of date.
+- **The aligner is the fan-out's referee** when both attempts belong to one, else the only referee-role slot, else the
+  person chooses; a slot that wrote either attempt never aligns it. Chosen in the milestone's questions.
+  `ThreadManager.align` enforces this itself, refuses one attempt given twice, and orients the pair as Compare shows
+  it whatever order it is passed in.
+- **What the aligner is shown.** The two attempts, named only "Attempt 1" and "Attempt 2", with their current text, and
+  the problem's stable sections; nothing else of the thread, since the prompt names the slots. It has its own prompt
+  (`aligner@1`). Its answer is read whole or not at all; a stopped or failed alignment stores nothing and the earlier
+  rows stay.
+- **The alignment request belongs to the comparison**, not to a message: its record hangs off the `Alignment`, so it
+  never enters the thread or a later context. Stop, quit, deleting the problem and orphan recovery handle it like any
+  request. A hidden message on the branch was considered and rejected: every reader of messages would have had to
+  filter it.
+- **Side order.** Which attempt is "Attempt 1" is fixed per pair from the two attempts' IDs (a hash), never from slot
+  letters or the order they were picked in. The columns never swap, blind or not.
+- **Blind mode** (invariant 9): the authors of a comparison stay hidden while blind mode is on and the person has not
+  recorded which attempt holds (1, 2, both or neither). Recording reveals that comparison only, and changes no check
+  or status. Chosen in the milestone's questions. While blind:
+  - Identity reaches Compare's views only through `CompareIdentity`, built once per render. While hidden it holds no
+    author, letter, colour or directory to look one up in; the aligners are "the referee" or "Referee 2". The
+    attempt pickers are replaced by "Comparing Attempt 1 and Attempt 2".
+  - Text a model or provider wrote is withheld when it names a model, a slot letter in an identifying form, or a
+    provider (`BlindShield`): a row's note and label, the summary, the error of a failed alignment, and what was
+    left out of the aligner's context. A withheld label gives way to what a step of the row establishes. Why
+    aligning cannot be sent is worded without the aligner's letter or provider.
+  - The toolbar's model chips and the proof-structure inspector are hidden in Compare, failing closed until blind
+    mode is turned off.
+  - Aligning stays available; its estimate names "the referee". Repair and row-to-referee requests wait for the
+    verdict, since their thread messages name the models.
+  - A stored verdict this version cannot read counts as recorded (the authors are shown) and is never written over,
+    as unreadable corrections are not. Chosen at the milestone's review.
+- **Re-pairing** by drag and drop (a step onto a row of the other attempt) and, equally, by each row's menu and
+  context menu: pair with, separate, mark equivalent or diverging, clear one's judgement. VoiceOver has the last four
+  as actions on the row and reaches "pair with" through the row's menu. A dragged step travels as its own content
+  type (`local.sangaku.step`, declared in `Config/sangaku-Info.plist`), so no text field accepts it.
+- **Key phrases** are kept only where they leave every formula of the step whole (invariant 16), checked when the
+  answer is stored and again when it is drawn. They are marked, and spelled out under the step ("Where they part:
+  …") in case the mark cannot be drawn.
+- **Keyboard.** J and K move between rows while the row list has the keyboard; the Compare menu has Next Row,
+  Previous Row, Differences Only and Align…, with no key equivalents, as in Review. The filter is a window setting
+  kept across comparisons.
+- **Questions about a row.** "Ask … to repair step N" goes to the author of that side; "Send this row to …" goes to the
+  referee, which answers in prose with its own prompt (`referee-reply@1`) and never gives a verdict. Both are ordinary
+  thread messages, shown and editable before they are sent, at the think-time chosen in the branch's composer. They
+  are linked to both attempts (`derivedFromIDs`), so wherever the attempts are withheld from a model (invariant 4),
+  so are they. A later fan-out sees them as it sees the attempts themselves. Nothing changes a step until a person
+  revises it.
+- **The thread** reads the stored comparison of a fan-out's first two attempts: the later attempt's runs of steps
+  judged equivalent on the current text collapse to "Steps 1–4 match A's", and a banner names the row where they part.
+  A step that asks for attention never collapses: one the referee listed as a gap, a delicate step or a guess, or one
+  with an open objection or a re-check flag. The referee message has "Compare Attempts".
+- **What the aligner's context leaves out** to fit its window is listed in the Align sheet before sending
+  (invariant 5), as the composer does.
+- **Layout.** Four columns from 680 points of content, one card per row below.
+- **Adopt** (Milestone 7) and the **counterexample search** (Milestone 8) are shown disabled with a caption.
+
 ## 2026-10-18: Milestone 5 architecture and choices
 
 - **Architecture.** The "clean" blueprint, chosen at the milestone's architecture step, with two adjustments: the

@@ -7,11 +7,15 @@ nonisolated enum RequestPurpose: Hashable, Sendable {
     case reply(slot: ModelSlotID?, fanOut: UUID?)
     /// The referee pass over a fan-out's attempts (Milestone 3).
     case referee(slot: ModelSlotID, fanOut: UUID)
+    /// A referee-role slot pairing two attempts' steps for Compare (Milestone 6). It is shown the two attempts and
+    /// nothing else of the conversation.
+    case alignment(slot: ModelSlotID, basis: AlignmentBasis)
 
     var slot: ModelSlotID? {
         switch self {
         case .reply(let slot, _): slot
         case .referee(let slot, _): slot
+        case .alignment(let slot, _): slot
         }
     }
 }
@@ -42,6 +46,8 @@ nonisolated enum ContextError: Error, Hashable, Sendable {
     /// The purpose names a fan-out, or a fan-out names an attempt, that is not on this branch. Refused rather
     /// than built without the fan-out's rules (invariant 4).
     case fanOutNotOnBranch(UUID)
+    /// An attempt to align is not on this branch.
+    case attemptNotOnBranch(UUID)
 
     var message: String {
         switch self {
@@ -55,6 +61,8 @@ nonisolated enum ContextError: Error, Hashable, Sendable {
             "There is no new message to answer."
         case .fanOutNotOnBranch:
             "The fan-out this request belongs to is not on this branch."
+        case .attemptNotOnBranch:
+            "An attempt to compare is not on this branch."
         }
     }
 }
@@ -163,6 +171,7 @@ nonisolated struct ContextBuilder: Sendable {
         /// The message that started the fan-out this request belongs to: it and everything after it are what is
         /// being answered, and are never dropped.
         var fanOutRequestID: UUID?
+        var pending = input.pending
         switch input.purpose {
         case .reply(let slot, let fanOutID?):
             guard let fanOut = snapshot.fanOut(fanOutID) else { throw .fanOutNotOnBranch(fanOutID) }
@@ -188,6 +197,18 @@ nonisolated struct ContextBuilder: Sendable {
                 for message in snapshot.messages where message.createdAt > last { withheld.insert(message.id) }
             }
             fanOutRequestID = fanOut.requestMessageID
+        case .alignment(_, let basis):
+            // Invariant 4: both attempts must have ended. The aligner is shown the two attempts and nothing else, so
+            // nothing in the conversation (the prompt names the slots) can tell it who wrote which.
+            var running: [UUID] = []
+            for id in [basis.first.messageID, basis.second.messageID] {
+                guard let attempt = snapshot.message(id) else { throw .attemptNotOnBranch(id) }
+                if attempt.outcome == .streaming { running.append(id) }
+            }
+            guard running.isEmpty else { throw .attemptsUnfinished(running) }
+            withheld = Set(snapshot.messages.map(\.id))
+            partialAttempts = [basis.first, basis.second].filter(\.partial).map(\.messageID)
+            pending = basis.text
         }
 
         // The conversation as units: one per message that has something to say, and every attempt the
@@ -199,7 +220,7 @@ nonisolated struct ContextBuilder: Sendable {
                 : unit(for: message, recipient: recipient, snapshot: snapshot)
             if let unit { units.append(unit) }
         }
-        if let pending = input.pending {
+        if let pending {
             units.append(Unit(messageID: nil, role: .user, text: pending, tokens: estimator.blockTokens(pending),
                               dropTitle: "Your new message"))
         } else if units.last?.role != .user {

@@ -38,6 +38,9 @@ enum PreviewFixtures {
         let messageA: Message
         let messageB: Message
         let refereeMessage: Message
+        /// A and B compared by C at 11:16, after steps 3 and 5 were revised: rows 1–4 equivalent, row 5 diverging,
+        /// step 6 only in A. Which of A and B is "Attempt 1" follows their IDs (`SideOrder`).
+        let alignment: Alignment
 
         var mathContext: MathContext { state.problems.mathContext(for: problem) }
 
@@ -233,6 +236,10 @@ enum PreviewFixtures {
         let parity = StepComment(author: byYou, body: "Does the parity argument close it?", revisionID: revised.stableID)
         parity.createdAt = day(11, 15)
         step5.comments = [jump, parity]
+
+        // C's alignment of A and B, made after the revisions above, so every row covers the current text.
+        let alignment = alignment(attemptA, attemptB, by: slotC, at: day(11, 16))
+        problem.alignments = [alignment]
         stepsA[0].citations = [Citation(rawText: "Dummit & Foote, Abstract Algebra, 3rd ed., §4.5", status: .found)]
         stepsA[0].citations?.first?.indexName = "zbMATH Open"
         stepsA[5].citations = [Citation(rawText: "Kessler & Varga (2019), J. Algebra, Lemma 2.4", status: .notFound)]
@@ -328,7 +335,7 @@ enum PreviewFixtures {
                        cappedLemma: lemma5, onRefutedClaim: lemma6, belowRefuted: lemma7,
                        mainBranch: main, question: plainQuestion, reply: reply, interruptedReply: interruptedReply,
                        failedReply: failedReply, fanOutPrompt: prompt, fanOut: fanOut, messageA: messageA,
-                       messageB: messageB, refereeMessage: refereeMessage)
+                       messageB: messageB, refereeMessage: refereeMessage, alignment: alignment)
     }
 
     /// A question from You and A's reply, with the request record `ContextBuilder` gives for it.
@@ -436,6 +443,40 @@ enum PreviewFixtures {
         return attempt
     }
 
+    /// The model's alignment of A and B: steps 1–4 equivalent, step 5 diverging where B claims q ∤ p + 1, step 6 only in A.
+    private static func alignment(_ attemptA: ProofAttempt, _ attemptB: ProofAttempt, by referee: ModelSlot,
+                                  at time: Date) -> Alignment {
+        let aIsFirst = SideOrder.orient(attemptA.stableID, attemptB.stableID).first == attemptA.stableID
+        let alignment = aIsFirst ? Alignment(attemptAID: attemptA.stableID, attemptBID: attemptB.stableID)
+                                 : Alignment(attemptAID: attemptB.stableID, attemptBID: attemptA.stableID)
+        alignment.createdAt = time
+        let stepsA = attemptA.sortedSteps, stepsB = attemptB.sortedSteps
+        let bSide = aIsFirst ? 2 : 1
+        func row(_ fromA: Step?, _ fromB: Step?, _ verdict: AlignmentVerdict, label: String, note: String? = nil,
+                 phrases: (String?, String?) = (nil, nil)) -> AlignmentRow {
+            let (first, second) = aIsFirst ? (fromA, fromB) : (fromB, fromA)
+            let (firstPhrase, secondPhrase) = aIsFirst ? phrases : (phrases.1, phrases.0)
+            let oriented: AlignmentVerdict = switch verdict {
+            case .onlyA: aIsFirst ? .onlyA : .onlyB
+            case .onlyB: aIsFirst ? .onlyB : .onlyA
+            default: verdict
+            }
+            return AlignmentRow(stepAID: first?.stableID, stepBID: second?.stableID, label: label,
+                                verdict: oriented.rawValue, note: note, keyPhraseA: firstPhrase, keyPhraseB: secondPhrase,
+                                revisionAID: first?.latestRevision?.stableID, revisionBID: second?.latestRevision?.stableID)
+        }
+        alignment.rows = (0..<4).map { row(stepsA[$0], stepsB[$0], .equivalent, label: stepsA[$0].establishes) } + [
+            row(stepsA[4], stepsB[4], .diverge, label: "Resolve q | p + 1",
+                note: #"Attempt \#(bSide)'s step is false: $q = p + 1$ happens for $(p, q) = (2, 3)$."#,
+                phrases: (#"we get $q = p + 1$"#, #"$q$ cannot divide $p + 1$"#)),
+            row(stepsA[5], nil, .onlyA, label: "Order 12 case",
+                note: "Needed only because of the row above."),
+        ]
+        alignment.alignerSlotID = referee.stableID
+        alignment.modelSummary = "The attempts agree up to step 4 and part ways at step 5."
+        return alignment
+    }
+
     /// A new revision of `step` with new text and the same `establishes`, mirrored onto the step.
     @discardableResult
     private static func revise(_ step: Step, by author: Author, at time: Date, text: String) -> StepRevision {
@@ -466,13 +507,7 @@ struct FixturePreview: PreviewModifier {
 
     func body(content: Content, context: PreviewFixtures.Handles) -> some View {
         content
-            .environment(\.mathRenderer, context.state.renderer)
-            .environment(\.problemManager, context.state.problems)
-            .environment(\.saveScheduler, context.state.saves)
-            .environment(\.threadManager, context.state.threads)
-            .environment(\.statementGraph, context.state.graph)
-            .environment(\.reviewManager, context.state.reviews)
-            .environment(\.credentialManager, context.state.credentials)
+            .appEnvironment(context.state)
             .environment(\.mathContext, context.mathContext)
             .modelContainer(context.state.container)
     }

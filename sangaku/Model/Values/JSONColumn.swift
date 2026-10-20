@@ -23,12 +23,21 @@ nonisolated struct LeanMessage: Codable, Hashable, Sendable {
     var text: String
 }
 
-/// One row of a step alignment between two attempts.
+/// One row of a model's alignment of two attempts: the step of each attempt it pairs (side 1 is `stepAID`), what they
+/// establish, and the model's verdict on the pair. The later fields are optional, so older rows still decode.
 nonisolated struct AlignmentRow: Codable, Hashable, Sendable {
     var stepAID: UUID?
     var stepBID: UUID?
     var label: String
     var verdict: String
+    /// The model's short reason, for a diverging row above all.
+    var note: String?
+    /// Where the two steps part ways, copied from each step's text.
+    var keyPhraseA: String?
+    var keyPhraseB: String?
+    /// The revision of each step the model was shown: a later revision makes the row out of date.
+    var revisionAID: UUID?
+    var revisionBID: UUID?
 
     var alignmentVerdict: AlignmentVerdict { AlignmentVerdict(stored: verdict) }
 }

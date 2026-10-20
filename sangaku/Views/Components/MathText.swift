@@ -8,14 +8,17 @@ import SwiftUI
 struct MathText: View {
     private let source: String
     private let showsProblems: Bool
+    private let mark: Range<Int>?
 
     @Environment(\.mathRenderer) private var renderer
     @Environment(\.mathContext) private var context
 
     /// - Parameter showsProblems: whether to list unrenderable formulas under the text. Compact places
     ///   (sidebar rows) turn it off; the source chip itself still shows inline.
-    init(_ source: String, showsProblems: Bool = true) {
+    /// - Parameter mark: a range of `source` (UTF-16 offsets) to underline and tint, where that keeps formulas whole.
+    init(_ source: String, mark: Range<Int>? = nil, showsProblems: Bool = true) {
         self.source = source
+        self.mark = mark
         self.showsProblems = showsProblems
     }
 
@@ -25,7 +28,7 @@ struct MathText: View {
     }
 
     var body: some View {
-        let composed = MathTextComposer.compose(source, renderer: renderer, context: context)
+        let composed = MathTextComposer.compose(source, renderer: renderer, context: context, mark: mark)
         VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(composed.blocks.enumerated()), id: \.offset) { _, block in
                 switch block {
@@ -43,6 +46,23 @@ struct MathText: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: composed.accessibilityText))
+    }
+}
+
+extension View {
+    /// Math in notes and captions, set smaller than the steps around it.
+    func captionMath() -> some View {
+        modifier(CaptionMath())
+    }
+}
+
+private struct CaptionMath: ViewModifier {
+    @Environment(\.mathContext) private var math
+
+    func body(content: Content) -> some View {
+        var smaller = math
+        smaller.fontSize = math.fontSize * 0.8
+        return content.environment(\.mathContext, smaller)
     }
 }
 

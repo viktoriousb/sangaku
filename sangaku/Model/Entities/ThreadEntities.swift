@@ -130,7 +130,9 @@ extension SangakuSchemaV1 {
         /// The model's output exactly as it arrived, for a request with structured output. The message keeps what
         /// was read from it; this keeps everything, so nothing is lost when only part could be read.
         @Attribute(.externalStorage) var rawOutput: String?
+        /// The record's one owner: the message it produced, or the comparison it aligned.
         var message: Message?
+        var alignment: Alignment?
 
         init() {}
 

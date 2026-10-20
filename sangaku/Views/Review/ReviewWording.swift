@@ -1,14 +1,5 @@
 import Foundation
 
-/// Times in Review: the time alone today, the day and time otherwise.
-enum ReviewTime {
-    static func text(_ date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
-        calendar.isDate(date, inSameDayAs: now)
-            ? date.formatted(date: .omitted, time: .shortened)
-            : date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
-    }
-}
-
 /// What Review says about a step, from its standing and who is who. Kept out of the views, so the words that state
 /// trust (who checked, what is blocked, what a revision resets) are tested.
 enum ReviewWording {
@@ -23,7 +14,7 @@ enum ReviewWording {
             chips.append(StepReviewStyle.unchecked)
         case .checked:
             let names = Prose.list(reviewers(standing.checks).map(authors.initials(ofPerson:)))
-            chips.append(StepReviewStyle.checked(names + (standing.latestCheckAt.map { " · " + ReviewTime.text($0) } ?? "")))
+            chips.append(StepReviewStyle.checked(names + (standing.latestCheckAt.map { " · " + ShortTime.text($0) } ?? "")))
         case .objected:
             chips += standing.openObjections.map {
                 StepReviewStyle.objection($0.verdict, by: authors.initials(ofPerson: $0.reviewerID))
@@ -49,7 +40,7 @@ enum ReviewWording {
         guard let original = provenance.original, let current = provenance.current else { return "No recorded author" }
         var line = "Written by \(authors.name(of: original.author))"
         if provenance.isRevised {
-            line += ", revised by \(authors.name(of: current.author)) · \(ReviewTime.text(current.createdAt))"
+            line += ", revised by \(authors.name(of: current.author)) · \(ShortTime.text(current.createdAt))"
                 + " (version \(current.number))"
         }
         return line
@@ -58,25 +49,25 @@ enum ReviewWording {
     /// "? Unclear, raised by You · 11:14".
     static func objectionLine(_ objection: ReviewFact, authors: AuthorDirectory) -> String {
         "\(objection.verdict.glyph) \(objection.verdict.title), raised by \(authors.name(ofPerson: objection.reviewerID))"
-            + " · \(ReviewTime.text(objection.createdAt))"
+            + " · \(ShortTime.text(objection.createdAt))"
     }
 
     /// "? Unclear by You, dismissed by MK · 11:20: The parity argument closes it."
     static func dismissalLine(_ objection: ReviewFact, authors: AuthorDirectory) -> String {
-        let when = objection.dismissedAt.map { " · " + ReviewTime.text($0) } ?? ""
+        let when = objection.dismissedAt.map { " · " + ShortTime.text($0) } ?? ""
         return "\(objection.verdict.glyph) \(objection.verdict.title) by \(authors.name(ofPerson: objection.reviewerID)), "
             + "dismissed by \(authors.name(ofPerson: objection.dismissedByID))\(when): \(objection.dismissalReason ?? "")"
     }
 
     /// "? Unclear by You, withdrawn · 11:20".
     static func withdrawalLine(_ review: ReviewFact, authors: AuthorDirectory) -> String {
-        let when = review.withdrawnAt.map { " · " + ReviewTime.text($0) } ?? ""
+        let when = review.withdrawnAt.map { " · " + ShortTime.text($0) } ?? ""
         return "\(review.verdict.glyph) \(review.verdict.title) by \(authors.name(ofPerson: review.reviewerID)), withdrawn\(when)"
     }
 
     /// One line of a step's history.
     static func historyLine(_ entry: HistoryEntry, step: StepReview, authors: AuthorDirectory) -> String {
-        let time = ReviewTime.text(entry.date)
+        let time = ShortTime.text(entry.date)
         switch entry.kind {
         case .version(let version):
             var changes: [String] = []

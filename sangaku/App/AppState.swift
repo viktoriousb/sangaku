@@ -1,5 +1,6 @@
 import AppKit
 import SwiftData
+import SwiftUI
 
 /// The composition root: created once per app launch and shared by every window.
 final class AppState {
@@ -9,6 +10,7 @@ final class AppState {
     let problems: ProblemManager
     let graph: StatementGraph
     let reviews: ReviewManager
+    let alignments: AlignmentService
     let credentials: CredentialManager
     let threads: ThreadManager
 
@@ -48,6 +50,7 @@ final class AppState {
         problems = ProblemManager(context: container.mainContext, saves: saves)
         graph = StatementGraph(context: container.mainContext, saves: saves, problems: problems)
         reviews = ReviewManager(context: container.mainContext, saves: saves, problems: problems)
+        alignments = AlignmentService(context: container.mainContext, saves: saves, problems: problems)
         // Problems from before Milestone 4 get their theorem; an empty store stays empty.
         problems.ensurePinnedTheorems()
 
@@ -102,5 +105,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "Don't Quit")
         alert.addButton(withTitle: "Quit Anyway")
         return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
+}
+
+extension View {
+    /// Every app-wide manager, as each window, preview and test host needs them. The one list to extend.
+    func appEnvironment(_ state: AppState) -> some View {
+        environment(\.mathRenderer, state.renderer)
+            .environment(\.problemManager, state.problems)
+            .environment(\.saveScheduler, state.saves)
+            .environment(\.threadManager, state.threads)
+            .environment(\.statementGraph, state.graph)
+            .environment(\.reviewManager, state.reviews)
+            .environment(\.alignmentService, state.alignments)
+            .environment(\.credentialManager, state.credentials)
     }
 }

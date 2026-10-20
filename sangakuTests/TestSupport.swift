@@ -187,3 +187,15 @@ func waitUntil(timeout: Duration = .seconds(3), _ condition: () -> Bool,
         try await Task.sleep(for: .milliseconds(5))
     }
 }
+
+/// SplitMix64: a small seeded generator, so property tests are reproducible.
+nonisolated struct SeededGenerator: RandomNumberGenerator {
+    var state: UInt64
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}

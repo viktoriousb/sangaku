@@ -168,7 +168,7 @@ struct PromoteSheet: View {
         guard let graph, let draft else { return }
         do {
             let statement = try graph.promote(draft, in: problem)
-            AccessibilityNotification.Announcement("Promoted to \(statement.label)").post()
+            VoiceOver.announce("Promoted to \(statement.label)")
             onPromoted(statement.stableID)
             dismiss()
         } catch {

@@ -67,7 +67,7 @@ struct ReviseSheet: View {
         }
         do {
             try reviews.revise(step.id, from: revision, text: text, establishes: establishes)
-            AccessibilityNotification.Announcement("Step \(step.index) revised").post()
+            VoiceOver.announce("Step \(step.index) revised")
             dismiss()
         } catch {
             self.error = error.message
@@ -139,7 +139,7 @@ struct DismissSheet: View {
             } else {
                 try reviews.dismiss(objection.id, reason: reason)
             }
-            AccessibilityNotification.Announcement("Objection on step \(step.index) dismissed").post()
+            VoiceOver.announce("Objection on step \(step.index) dismissed")
             dismiss()
         } catch {
             self.error = error.message

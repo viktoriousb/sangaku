@@ -6,8 +6,17 @@ struct InspectorPanel: View {
     let window: WindowState
 
     var body: some View {
-        ScrollView {
-            InspectorContent(window: window)
+        if window.hidesModelChrome {
+            // The graph says which model each statement came from (invariant 9).
+            ContentUnavailableView {
+                Label("Hidden in blind mode", systemImage: "eye.slash")
+            } description: {
+                Text("The proof structure names who wrote each statement. It returns when blind mode is off (⌘⇧B).")
+            }
+        } else {
+            ScrollView {
+                InspectorContent(window: window)
+            }
         }
     }
 }

@@ -24,7 +24,9 @@ nonisolated enum BranchState: String, StoredEnum {
 
 /// `reply` is a model's prose answer in the conversation; `attempt` is a structured attempt in a fan-out.
 nonisolated enum MessageKind: String, StoredEnum {
-    case prompt, reply, attempt, referee, compute, system
+    /// `refereeReply` is a referee's prose answer to a question (about one row of a comparison, say): never a
+    /// verdict on an attempt, which only `referee` messages give.
+    case prompt, reply, attempt, referee, refereeReply, compute, system
     static let fallback = MessageKind.system
 
     /// The role a model wrote this kind of message in. Provenance reads this, not the slot's current role, so
@@ -32,7 +34,7 @@ nonisolated enum MessageKind: String, StoredEnum {
     var authoringRole: SlotRole? {
         switch self {
         case .reply, .attempt: .prover
-        case .referee: .referee
+        case .referee, .refereeReply: .referee
         case .prompt, .compute, .system: nil
         }
     }
