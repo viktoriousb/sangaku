@@ -1081,3 +1081,168 @@ low ones and test gaps; all were fixed.
 
 Milestone 8, Verification and export: `ToolRunner`'s sandbox, the shared Lean workspace, the axiom check and fidelity
 review, the GAP sweep, the citation check, LaTeX, Kerodon and Lean export, and the AI-use statement.
+
+## 2026-10-20: Milestone 8a, Verification
+
+The milestone runs in two passes: 8a, verification (this entry), and 8b, export.
+
+### What was built
+
+- **Running tools** (`Services/Verification`).
+  - `ProcessExecutor` is the one place a process starts: `/usr/bin/sandbox-exec -p <profile>` with the job's own
+    environment, standard input from /dev/null, default signal handling and no other descriptor of the app.
+  - Deny-default profiles (`Resources/Sandbox/sandbox-offline.sb`, `sandbox-fetch.sb`) with each job's grants appended
+    last, paths resolved first. Offline jobs read only what is granted and write only their run folder.
+  - A watchdog with its own queue: time, memory of the group and of descendants that start sessions of their own,
+    and what the run folder holds. Stop, a limit or quitting sends TERM, then KILL.
+  - Pid files and `reapOrphans` stop what a crash left running; leftover run folders are removed at launch.
+  - `ToolRunner` knows what runs, refuses a second job with the same key, and stops jobs by key, problem or quit.
+  - `SandboxJob` is made only by its factories; those that run written code take an `Approval`, and the file they
+    write holds the approval's text.
+- **Settings.** Paths for Python, GAP, Sage and elan, found or chosen; time and memory limits; the Lean workspace
+  folder (no default) and Fetch Mathlib, a person's step with the network.
+- **Lean** (`LeanService`).
+  - The shared workspace pinned to Lean v4.35.0 and Mathlib v4.35.0, with Mathlib's downloads cached inside it.
+  - One module per problem: every statement's checked code in its own namespace, dependencies first, the candidate in
+    place of the statement's own. The sheet shows the whole module and Check runs exactly what was shown.
+  - A check compiles the module with the toolchain's own `lean`, then the app's kernel check (`AxiomCheck.lean`, run
+    with `lean --run`) reads the compiled module as data, replays every declaration through Lean's kernel and reports
+    each `main`'s axioms. None of the module's code runs in that second process.
+  - The gate (`LeanGate`) lets mathematics through and refuses code that programs Lean: meta-programs, elaborators,
+    syntax and notation, string and quoted-name literals, Lean's own namespaces, global instances, attributes and
+    options outside short lists, and leaving the namespace.
+  - A statement part names no other statement's code; a proof names only statements its statement uses.
+  - `LeanResult.record` is the one writer of the axiom fields. Rule 2 counts a result only on its own source, its
+    own declaration, standard axioms, no errors or `sorry`, references within what it uses, and a person's fidelity
+    ✓ on the current Lean statement and wording.
+  - Fidelity reviews are a person's, on exactly the two texts shown; a person can withdraw their own.
+- **Computations** (`ComputeService`). Scout-written and person-written cells; Run on the code shown; every run is
+  `Evidence` with its scope, outcome, what the code reported (`sangaku-result:`), who ran it and the tool's version.
+  A reported counterexample refutes nothing until a person accepts it, in their words; the acceptance can be
+  withdrawn.
+- **Citations** (`CitationService`). Models cite per step (`proof-attempt@4`); people add and remove citations; a
+  click looks them up in arXiv and zbMATH Open, sending only the query shown. A lookup that cannot decide leaves a
+  citation unverified, never "not found".
+- **Requests.** The formalizer and scout roles (`formalizer@2`, `scout@2`): `ThreadManager.requestTask` with
+  `TaskBasis`; the `.task` purpose withholds the conversation; drafts and cells never reach a later prompt, except a
+  formalizer's own last code and Lean's capped messages.
+- **Screens.**
+  - Review's verification panel: Lean per statement, citations, evidence, beside the steps from 876 points wide.
+  - The thread's cell and draft bodies with their actions, also in the message's context menu.
+  - The inspector's Lean and Checks rows and actions.
+  - Compare's counterexample search, waiting while blind mode is on.
+  - Sheets for Formalize, Check, Confirm Statement, Ask for a Check, a person's computation, Accept Refutation, Check
+    Citations and Add Citation, all through one handler and host.
+  - Styles for Lean standings, fidelity, runs and citations; a struck-through "not found".
+- **Fixture.** Lean results recorded through the writer; fidelity with wording; the GAP sweep as You's cell;
+  `makeVerified()` (`-SangakuFixtureVerified YES`) adds a formalizer and a scout, a draft for Lem 6, Lem 7 with an
+  error, Claim 2 with a reported counterexample, a timed-out run and two citations to look up.
+
+### Decisions
+
+Recorded in `docs/DECISIONS.md` (2026-10-20, Milestone 8a). A copy of the existing store opened with the new schema
+without a reset.
+
+**Spec drift to reconcile** (not edited):
+- `VerificationService` is three services: `LeanService`, `ComputeService`, `CitationService`.
+- A check compiles the module with the toolchain's own `lean --json` (not `lake env lean`) in its own run folder,
+  and the axioms come from the app's kernel check, not from `#print axioms`.
+- The module lives in each check's run folder, not in the workspace; a check reads only the toolchain and Mathlib.
+- Mathlib's downloads are cached in the workspace, not in the home folder's cache.
+- New entities `LeanDraft` and `ComputeCell`, the message kind `leanDraft`, and new fields on `LeanResult`,
+  `FidelityReview` (wording, withdrawal), `Evidence` and `Citation`.
+- Rule 2 adds that a statement's Lean code names only statements it uses.
+- No entitlements file: App Sandbox stays off (the spec's "outgoing network, user-selected files" applies only with
+  it on).
+
+### Tests
+
+594 tests in 106 suites, all passing. Milestone 8a added 93, 29 of them after the review:
+- **Lean:**
+  - the gate (mathematics through; literals, meta-programs, namespaces, attributes, options, global instances and
+    the target's shape refused);
+  - the module's text and lines; reading Lean's messages and the kernel check exactly;
+  - rule 2 and the fidelity rule, withdrawal included; references within what a statement uses;
+  - the service: the two runs and their grants, errors recorded where they are, failures recording nothing, Stop,
+    one check at a time, provenance of drafts edited or not, editing a refused draft, fetching;
+  - real Lean in the real sandbox: axioms with `sorry` and dependencies, a forged report caught by the kernel check,
+    a compiled module with other imports refused.
+- **Processes:** exit and output, timeouts killing the tree, an endless flood still stopped, a child in its own
+  session killed, the folder limit, Stop before start, quitting, pid files and orphans, isolation, the sandbox (run
+  folder only; no shared temporary folders, home folder, home file, TCP or UDP; a read-only grant not written),
+  Python and the memory watchdog.
+- **Computations:** Run on the code shown, refusals, outcomes, running from the click, Stop before the run,
+  versions, deleting a problem mid-run, announcements, a person's cells, refutations.
+- **Citations:** lookups, what is sent equal to the query shown, failures, an empty zbMATH answer, Stop and restart,
+  an undecided lookup keeping a decided one, matching and links, adding and removing, model citations.
+- **Requests:** the formalizer and scout bases, refusals, code kept out of later prompts, parsing.
+- **Screens:** styles (invariant 3), wording (no "passed", "proved" or "verified"; printed output never typeset),
+  states, blind mode (including after a verdict), the handler's intents, layout both ways, smoke renders of the panel,
+  the thread and every sheet, and source scans of who writes what.
+
+### Checked in the running app
+
+Launched with `-SangakuFixtureVerified YES` on Review and Thread. Review: the panel beside the steps with Lem 1
+verified in Lean, confirmed by You and Withdraw My Review, the checked lines naming Lean 4.35.0 and the code's author,
+and the steps' citation chips. Thread: D's draft with Check and Edit, E's cell with its 18 lines in the code box,
+Run Again, the run's sentence typeset and "Reported: A4 has 4 Sylow 3-subgroups" as printed. The first look showed the
+long code box centred with wrapped lines; it now reads from the top-left with one line per line of code. The renders
+show the fidelity sheet with neither verdict the default and the check sheet in edit mode.
+
+Not tried by hand: Fetch Mathlib and a check against it (the real tests run Lean without Mathlib), the sheets, the
+context menus, Withdraw My Review and the keyboard.
+
+### Review
+
+Three reviewers (trust invariants, correctness, conventions) found two high-severity issues, thirteen medium and a
+set of low ones and test gaps; all were fixed.
+- **High.**
+  - Code longer than 40,000 characters ran with its tail unseen (invariant 14). Code is now shown whole, line by
+    line, and invisible or direction-changing characters are refused in cells, drafts and a person's code.
+  - Model-written Lean could forge the axiom report (invariant 12): an elaborator answering `#print axioms`, or a
+    declaration added past the kernel. A test reproduced it with the real toolchain. Axioms now come from the app's
+    separate kernel check; the gate became an allow-list; a check reads only the toolchain and Mathlib.
+- **Medium.**
+  - Edit… on a refused draft opened a blank template; editing an unchanged draft credited the person with it.
+  - Statements in one module could name each other's code without a `uses` edge, or change each other through
+    global instances; a deleted dependency left results counting.
+  - zbMATH's empty answer could mark a citation "not found"; arXiv's query was too narrow.
+  - A flood of output could starve the watchdog.
+  - Sandbox reads were wider than the rule chosen (a tool in `~/Documents/bin` opened `~/Documents`; fetching wrote
+    the home folder's cache).
+  - Return recorded "They Match", and a fidelity ✓ could not be taken back.
+  - Printed output was typeset in the run line.
+  - "Already running" always named a Lean check.
+  - The context menu of cells and drafts offered only Copy LaTeX Source.
+  - The panel read shared state in every row and built rows inline; "latest run" was decided in four places;
+    wording that says what a check means sat in the views.
+- **Low.**
+  - Stopping a lookup recorded it; an old check could clear a new one.
+  - A second Run or Check could start in the gap before a job; a failed version probe was kept.
+  - Children starting their own session escaped every kill; runs had no disk limit; run folders were left after a
+    crash.
+  - Two spawn flags were missing; a failed wait read as exit 0; Lean's output split at Unicode line separators.
+  - Crossing Review's width line reset state and focus; quitting stopped work before Don't Quit; the scout's source
+    attempts were never filled; dead fields and parameters; Settings listed its environment by hand; the verified
+    fixture flag did nothing alone; sheets rebuilt their request on every keystroke; previews were missing; finished
+    work was not announced; two groups hid their buttons from VoiceOver.
+  - The role prompts' "the status the researchers have given them" (deferred in Milestone 4) now says the status is
+    derived; every prompt has a new version.
+- **Found while fixing.** In Compare, a recorded verdict showed Search for a Counterexample while blind mode still
+  refused it; the search now waits with the same words until blind mode is off.
+
+### Deferred
+
+- Fetching Mathlib and checking against it, by hand.
+- A process that double-forks and leaves within the watchdog's first fifth of a second is not tracked; the sandbox
+  still keeps it offline and its folder is removed.
+- The gate is lexical: it bounds what code can do, and the kernel check makes the axioms trustworthy, but a fidelity
+  review compares the Lean statement as written, not as elaborated. Showing the kernel's statement of `main` beside it
+  would close the gap.
+- The partial-attempt progress wording (from Milestone 5), with the AI-use statement in 8b.
+- The spec drift listed under Decisions, until `CLAUDE.md` is reconciled.
+
+### Next
+
+Milestone 8b, Export: LaTeX, the Kerodon manuscript, the Lean project and the AI-use statement, with the
+partial-attempt wording.

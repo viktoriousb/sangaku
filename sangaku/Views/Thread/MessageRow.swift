@@ -36,6 +36,9 @@ struct AuthorDirectory: Equatable {
     /// What a person whose record is gone is called, everywhere.
     static let missingPerson = "Someone no longer listed"
 
+    /// The stable IDs of the problem's people: who can check, confirm and accept (invariant 1).
+    var personIDs: Set<UUID> { Set(profiles.keys) }
+
     var profiles: [UUID: PersonProfile] = [:]
     var slots: [UUID: SlotInfo] = [:]
     /// The person using the app.
@@ -138,7 +141,15 @@ struct MessageRow: View {
         VStack(alignment: .leading, spacing: 10) {
             header(isModel: isModel)
             if let stream {
-                LiveReplyBody(stream: stream)
+                if message.kind == .leanDraft || message.kind == .compute {
+                    TaskStreamingBody(kind: message.kind, stream: stream)
+                } else {
+                    LiveReplyBody(stream: stream)
+                }
+            } else if message.kind == .compute, let cell = message.computeCell {
+                ComputeCellBody(message: message, cell: cell, authors: authors)
+            } else if message.kind == .leanDraft, let draft = message.leanDraft {
+                LeanDraftBody(message: message, draft: draft, authors: authors)
             } else {
                 MessageBody(message: message, isModel: isModel)
             }
@@ -153,8 +164,12 @@ struct MessageRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .modifier(MessageFrame(isModel: isModel))
         .contextMenu {
-            Button("Copy LaTeX Source") {
-                Pasteboard.copy(stream?.fullText ?? message.bodyLaTeX)
+            if stream == nil, message.computeCell != nil || message.leanDraft != nil {
+                VerificationMessageMenu(message: message)
+            } else {
+                Button("Copy LaTeX Source") {
+                    Pasteboard.copy(stream?.fullText ?? message.bodyLaTeX)
+                }
             }
             if let record = message.request {
                 Button("View Context…") { onViewContext(record) }
@@ -203,7 +218,8 @@ private struct MessageBody: View {
     var body: some View {
         let ink = isModel ? StatusStyle.style(for: .proposed).ink.color : ColorToken.ink.color
         VStack(alignment: .leading, spacing: 8) {
-            if message.kind == .compute {
+            if message.kind == .compute || message.kind == .leanDraft {
+                // Output that could not be read as a cell or a draft, kept as it arrived; nothing here can run.
                 Text(message.bodyLaTeX)
                     .font(.system(.callout, design: .monospaced))
                     .textSelection(.enabled)

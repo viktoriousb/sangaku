@@ -16,6 +16,17 @@ extension ModelContext {
     }
     func first(_ type: Step.Type, stableID id: UUID) -> Step? { first(#Predicate<Step> { $0.stableID == id }) }
     func first(_ type: Review.Type, stableID id: UUID) -> Review? { first(#Predicate<Review> { $0.stableID == id }) }
+    func first(_ type: Statement.Type, stableID id: UUID) -> Statement? {
+        first(#Predicate<Statement> { $0.stableID == id })
+    }
+    func first(_ type: LeanDraft.Type, stableID id: UUID) -> LeanDraft? {
+        first(#Predicate<LeanDraft> { $0.stableID == id })
+    }
+    func first(_ type: ComputeCell.Type, stableID id: UUID) -> ComputeCell? {
+        first(#Predicate<ComputeCell> { $0.stableID == id })
+    }
+    func first(_ type: Evidence.Type, stableID id: UUID) -> Evidence? { first(#Predicate<Evidence> { $0.stableID == id }) }
+    func first(_ type: Citation.Type, stableID id: UUID) -> Citation? { first(#Predicate<Citation> { $0.stableID == id }) }
 
     private func first<Entity: PersistentModel>(_ predicate: Predicate<Entity>) -> Entity? {
         var descriptor = FetchDescriptor<Entity>(predicate: predicate)

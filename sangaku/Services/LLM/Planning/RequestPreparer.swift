@@ -38,6 +38,8 @@ nonisolated struct RequestSpec: Hashable, Sendable {
         case align(AlignmentBasis)
         /// A referee-role slot answering a question in prose (one row of a comparison): never a verdict.
         case refereeReply
+        /// A formalizer's Lean draft or a scout's computation for one statement.
+        case task(TaskBasis)
     }
 
     var slot: ProblemSnapshot.SlotDigest
@@ -94,6 +96,8 @@ nonisolated enum RequestPreparer {
         case .refereeReply:
             (role, purpose, format) = (.referee, .reply(slot: slot.id, fanOut: nil), nil)
             promptName = "referee-reply"
+        case .task(let basis):
+            (role, purpose, format) = (basis.role, .task(slot: slot.id, basis: basis), basis.format)
         }
         guard slot.role == role else { throw .slotCannotReceive(letter: slot.letter, role: slot.role) }
         let prompt = promptName.map { env.prompts.prompt(named: $0, role: role) }

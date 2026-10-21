@@ -108,7 +108,7 @@ struct AlignmentRequestTests {
             #expect(!conversation.contains(letter), "\(letter)")
         }
         #expect(!conversation.contains("revised by"))
-        #expect(built.turns.last?.role == .user && built.format == .alignment && built.promptVersion == "aligner@1")
+        #expect(built.turns.last?.role == .user && built.format == .alignment && built.promptVersion == "aligner@2")
     }
 
     @Test("Invariant 4: an attempt still being written is refused; one not on the branch is too")
@@ -134,7 +134,7 @@ struct AlignmentRequestTests {
         let referee = try #require(snapshot.slots.first { $0.id == fixture.slotC.slotID })
         let prepared = try RequestPreparer.prepare(RequestSpec(slot: referee, kind: .align(basis()), effort: .standard),
                                                    snapshot: snapshot, env: env)
-        #expect(prepared.built.promptVersion == "aligner@1" && prepared.request.format == .alignment)
+        #expect(prepared.built.promptVersion == "aligner@2" && prepared.request.format == .alignment)
         let prover = try #require(snapshot.slots.first { $0.id == fixture.slotA.slotID })
         #expect(throws: SendBlocker.slotCannotReceive(letter: "A", role: .prover)) {
             try RequestPreparer.prepare(RequestSpec(slot: prover, kind: .align(basis()), effort: .standard),

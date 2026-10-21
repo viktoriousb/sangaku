@@ -10,12 +10,16 @@ nonisolated enum RequestPurpose: Hashable, Sendable {
     /// A referee-role slot pairing two attempts' steps for Compare (Milestone 6). It is shown the two attempts and
     /// nothing else of the conversation.
     case alignment(slot: ModelSlotID, basis: AlignmentBasis)
+    /// A formalizer drafting Lean code, or a scout drafting a computation, for one statement (Milestone 8). Shown the
+    /// basis and nothing else of the conversation.
+    case task(slot: ModelSlotID, basis: TaskBasis)
 
     var slot: ModelSlotID? {
         switch self {
         case .reply(let slot, _): slot
         case .referee(let slot, _): slot
         case .alignment(let slot, _): slot
+        case .task(let slot, _): slot
         }
     }
 
@@ -225,6 +229,13 @@ nonisolated struct ContextBuilder: Sendable {
             withheld = Set(snapshot.messages.map(\.id))
             partialAttempts = [basis.first, basis.second].filter(\.partial).map(\.messageID)
             pending = basis.text
+        case .task(_, let basis):
+            // The attempts the statement came from must have ended (invariant 4); the basis carries what the model
+            // needs, so the conversation, and with it every independent attempt, is withheld.
+            let running = basis.sourceMessageIDs.filter { snapshot.message($0)?.outcome == .streaming }
+            guard running.isEmpty else { throw .attemptsUnfinished(running) }
+            withheld = Set(snapshot.messages.map(\.id))
+            pending = basis.text
         }
 
         // The conversation as units: one per message that has something to say, and every attempt the
@@ -379,6 +390,10 @@ nonisolated struct ContextBuilder: Sendable {
         case .streaming, .declined: return nil
         default: break
         }
+        // Model-written code and what it printed never reach a later prompt: a person's accepted refutation, in their
+        // own words, is the only way a computation's result is told to models. The one exception is a formalizer's own
+        // task, which quotes the statement's last checked Lean code and Lean's capped messages (`FormalizationBasis`).
+        if message.kind == .leanDraft || message.kind == .compute { return nil }
         let isOwn = recipient.map { message.author == .model($0) } ?? false
         var parts: [String] = []
         if !isOwn, let label = Self.label(for: message, in: snapshot) { parts.append(label) }
@@ -465,7 +480,6 @@ nonisolated struct ContextBuilder: Sendable {
             // The role the message was written in, not the slot's role now: editing a slot never relabels history.
             return switch message.kind {
             case .referee: "[Referee \(slot.letter)]"
-            case .compute: "[Computation cell by \(slot.letter)]"
             case .attempt: "[Attempt by Model \(slot.letter)]"
             default: "[Model \(slot.letter)" + (message.kind.authoringRole.map { " · \($0.rawValue)" } ?? "") + "]"
             }

@@ -36,6 +36,7 @@ struct CompareScreen: View {
     @Environment(\.alignmentService) private var alignments
     @Environment(\.threadManager) private var threads
     @Environment(\.branchActions) private var branchActions
+    @Environment(\.verificationActions) private var verificationActions
     @FocusState private var listFocused: Bool
     @State private var position = ScrollPosition(idType: RowKey.self)
     @State private var width: CGFloat = 0
@@ -125,13 +126,7 @@ struct CompareScreen: View {
                 Text(CompareKeys.legend + " · drag a step's handle onto a row of the other attempt to pair them")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                ResolvePanel(row: rows.first { $0.id == current } ?? ThreadAgreement.firstDivergence(state.rows),
-                             identity: identity, run: run, notice: notice?.row == nil ? notice : nil,
-                             adoption: branchActions == nil ? .none
-                                 : CompareAdoption.offer(identity: identity, pair: state.pair,
-                                                         adopted: problem.adoptedAttemptID),
-                             onHolds: { record($0, in: state.pair) }, onAsk: { sheet = .question($0) },
-                             onAdopt: { branchActions?(.adopt(attemptID: $0)) })
+                resolvePanel(rows.first { $0.id == current } ?? ThreadAgreement.firstDivergence(state.rows))
             }
             .padding(Self.padding)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.width - 2 * Self.padding }, action: { width = $0 })
@@ -211,6 +206,21 @@ struct CompareScreen: View {
         } catch {
             say(error.message, row: intent.row, isError: true)
         }
+    }
+
+    /// The resolve panel for a row, with Adopt and the counterexample search where they may be offered.
+    private func resolvePanel(_ row: CompareRow?) -> some View {
+        let adoption: CompareAdoption = branchActions == nil ? .none
+            : CompareAdoption.offer(identity: identity, pair: state.pair, adopted: problem.adoptedAttemptID)
+        return ResolvePanel(row: row, identity: identity, run: run, notice: notice?.row == nil ? notice : nil,
+                            adoption: adoption, onHolds: { record($0, in: state.pair) }, onAsk: { sheet = .question($0) },
+                            onAdopt: { branchActions?(.adopt(attemptID: $0)) },
+                            counterexample: row.map { CompareSearch.seed($0, problem: problem) },
+                            onSearch: verificationActions == nil ? nil : search, searchWaits: window.hidesModelChrome)
+    }
+
+    private func search(_ seed: ScoutSeed) {
+        verificationActions?(.askForCheck(seed))
     }
 
     private func record(_ verdict: HoldsVerdict, in pair: ComparedPair) {

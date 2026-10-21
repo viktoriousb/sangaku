@@ -1,0 +1,34 @@
+;; sangaku: the sandbox for fetching Mathlib, a step a person starts. It runs only the pinned toolchain's own
+;; programs (elan, lake, git, curl) and never code a model or a person wrote. It may use the network; it may still
+;; read and write only the workspace, the elan folder and the Mathlib cache in the home folder, which the app appends.
+(version 1)
+(deny default)
+(import "bsd.sb")
+
+(allow process-fork)
+(allow process-exec*)
+(allow sysctl-read)
+(allow mach-lookup)
+(allow ipc-posix-shm*)
+
+(allow file-read*
+    (literal "/")
+    (subpath "/bin")
+    (subpath "/sbin")
+    (subpath "/usr")
+    (subpath "/System")
+    (subpath "/Library")
+    (subpath "/opt/homebrew")
+    (subpath "/private/etc")
+    (subpath "/private/var")
+    (subpath "/dev"))
+(allow file-read-metadata)
+
+(allow file-write*
+    (literal "/dev/null")
+    (literal "/dev/tty")
+    (literal "/dev/dtracehelper")
+    (subpath "/private/var/folders"))
+
+(allow network*)
+(deny signal (target others))

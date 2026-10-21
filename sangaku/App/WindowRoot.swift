@@ -32,7 +32,12 @@ struct WindowRoot: View {
                 .navigationSplitViewColumnWidth(Self.sidebarWidth)
         } detail: {
             WorkspaceDetail(window: window)
-                .safeAreaInset(edge: .top, spacing: 0) { SaveErrorBanner() }
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    VStack(spacing: 0) {
+                        SaveErrorBanner()
+                        VerificationNoticeBanner(window: window)
+                    }
+                }
                 // On the detail column, not the split view, so the inspector is a column of the same split view
                 // and its width is not counted twice.
                 .inspector(isPresented: $window.inspectorPresented) {
@@ -41,6 +46,8 @@ struct WindowRoot: View {
                 }
         }
         .toolbar { WorkspaceToolbar(window: window) }
+        // On the whole split view, so the inspector's actions reach it too.
+        .verificationSheets(window: window)
         .focusedSceneValue(\.windowState, window)
         // Showing the inspector raises the minimum, and the window widens to make room.
         .frame(minWidth: Self.minimumWidth(inspector: window.inspectorPresented), minHeight: Self.minimumHeight)

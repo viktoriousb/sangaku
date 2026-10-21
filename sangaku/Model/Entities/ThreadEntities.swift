@@ -84,6 +84,12 @@ extension SangakuSchemaV1 {
         var proofAttempt: ProofAttempt?
         @Relationship(deleteRule: .nullify, inverse: \Branch.forkedFrom)
         var forks: [Branch]? = []
+        /// For a formalizer's message: the Lean code it drafted.
+        @Relationship(deleteRule: .cascade, inverse: \LeanDraft.message)
+        var leanDraft: LeanDraft?
+        /// For a computation message: the cell it carries.
+        @Relationship(deleteRule: .cascade, inverse: \ComputeCell.message)
+        var computeCell: ComputeCell?
 
         init(author: Author? = nil, bodyLaTeX: String = "", kind: MessageKind = .prompt) {
             self.bodyLaTeX = bodyLaTeX

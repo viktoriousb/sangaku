@@ -1,0 +1,37 @@
+;; sangaku: the sandbox every check and computation runs in (invariant 14).
+;; Everything is denied unless allowed below. The app appends the job's own grants (its work folder, the Lean
+;; workspace, a tool installed under the home folder) after these rules; the last matching rule wins.
+(version 1)
+(deny default)
+(import "bsd.sb")
+
+;; Programs may start the programs they can read.
+(allow process-fork)
+(allow process-exec*)
+(allow sysctl-read)
+
+;; The system and the places tools are installed outside the home folder.
+(allow file-read*
+    (literal "/")
+    (subpath "/bin")
+    (subpath "/sbin")
+    (subpath "/usr")
+    (subpath "/System")
+    (subpath "/Library/Frameworks")
+    (subpath "/Library/TeX")
+    (subpath "/opt/homebrew")
+    (subpath "/private/etc")
+    (subpath "/private/var/db/timezone")
+    (subpath "/dev"))
+
+;; Names and sizes anywhere (a program may need to resolve its own path), never contents or directory listings.
+(allow file-read-metadata)
+
+(allow file-write*
+    (literal "/dev/null")
+    (literal "/dev/tty")
+    (literal "/dev/dtracehelper"))
+
+;; No network, and no signals to processes outside the job.
+(deny network*)
+(deny signal (target others))

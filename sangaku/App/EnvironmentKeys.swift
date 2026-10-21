@@ -26,6 +26,10 @@ extension EnvironmentValues {
     /// The window's handler of branch intents (`BranchSheetHost`). Unset where branches cannot be changed.
     @Entry var branchActions: BranchActions? = nil
     @Entry var credentialManager: CredentialManager? = nil
+    @Entry var toolSettings: ToolSettings? = nil
+    @Entry var leanService: LeanService? = nil
+    @Entry var computeService: ComputeService? = nil
+    @Entry var citationService: CitationService? = nil
     /// Overrides the system's accessibility display settings (previews and tests).
     @Entry var statusAccessibilityOverride: StatusAccessibility? = nil
 }

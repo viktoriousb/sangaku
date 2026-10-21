@@ -60,6 +60,10 @@ extension SangakuSchemaV1 {
         var leanStatementSource: String = ""
         var verdictRaw: String = FidelityVerdict.fallback.rawValue
         var comment: String?
+        /// The informal statement as the person read it: a review given on other wording does not count.
+        var informalWording: String = ""
+        /// When the reviewer took it back; it stays in the history and counts for nothing.
+        var withdrawnAt: Date?
         var statement: Statement?
 
         init(reviewer: PersonID? = nil, leanStatementSource: String = "", verdict: FidelityVerdict = .differs) {
@@ -74,17 +78,30 @@ extension SangakuSchemaV1 {
         }
     }
 
-    /// Output of a computation attached to a statement. `scope` says exactly what was tested.
+    /// One run of a computation attached to a statement: the exact code a person ran, what it printed and how it
+    /// ended. `scope` says exactly what was tested. Every run that started is recorded, failures included.
     @Model final class Evidence {
         var stableID: UUID = UUID()
         var createdAt: Date = Date.now
         var toolRaw: String = EvidenceTool.fallback.rawValue
         @Attribute(.externalStorage) var code: String = ""
         @Attribute(.externalStorage) var output: String = ""
+        /// The run completed and its code reported that the claim held over the scope.
         var passed: Bool = false
         var scope: String = ""
         var toolVersion: String = ""
         var statement: Statement?
+        /// The cell that was run, and the person who clicked Run.
+        var cell: ComputeCell?
+        var runByID: UUID?
+        var startedAt: Date?
+        var outcomeRaw: String = RunOutcome.fallback.rawValue
+        var verdictRaw: String = CellVerdict.fallback.rawValue
+        var exitCode: Int?
+        var durationSeconds: Double = 0
+        /// Output was cut to fit; what was kept is the start and the end.
+        var truncated: Bool = false
+        @Attribute(.externalStorage) var errorText: String = ""
 
         init(tool: EvidenceTool = .python, code: String = "", output: String = "", passed: Bool = false, scope: String = "") {
             self.toolRaw = tool.rawValue
@@ -98,9 +115,20 @@ extension SangakuSchemaV1 {
             get { EvidenceTool(stored: toolRaw) }
             set { toolRaw = newValue.rawValue }
         }
+
+        var outcome: RunOutcome {
+            get { RunOutcome(stored: outcomeRaw) }
+            set { outcomeRaw = newValue.rawValue }
+        }
+
+        var verdict: CellVerdict {
+            get { CellVerdict(stored: verdictRaw) }
+            set { verdictRaw = newValue.rawValue }
+        }
     }
 
-    /// The result of checking a statement's Lean formalization.
+    /// The result of checking a statement's Lean formalization. Only `LeanResult.record` writes the axiom fields, from
+    /// the service's own reading of the check (`LeanOutputReader`).
     @Model final class LeanResult {
         var stableID: UUID = UUID()
         var createdAt: Date = Date.now
@@ -112,6 +140,24 @@ extension SangakuSchemaV1 {
         var axioms: [String] = []
         var checkedAt: Date?
         var statement: Statement?
+        /// The declaration whose service-appended `#print axioms` line was read. Empty when that line did not report:
+        /// then `axioms` means nothing, and rule 2 fails closed.
+        var axiomCheckedDeclaration: String = ""
+        /// SHA-256 of `source` as checked: a later change to the text disqualifies the result.
+        var checkedDigest: String = ""
+        /// SHA-256 of the whole module the check ran (one per problem).
+        var moduleDigest: String = ""
+        var sorryLocationsJSON: Data?
+        var toolchain: String = ""
+        var leanVersion: String = ""
+        var mathlibRev: String = ""
+        var durationSeconds: Double = 0
+        /// The person who clicked Check, and who wrote the source: the formalizer whose draft it is, unchanged, or the
+        /// person.
+        var checkedByID: UUID?
+        var sourceAuthorKindRaw: String?
+        var sourceAuthorID: UUID?
+        var draftMessageID: UUID?
 
         init(source: String = "", leanStatementSource: String = "", sorryCount: Int = 0, axioms: [String] = []) {
             self.source = source
@@ -126,6 +172,21 @@ extension SangakuSchemaV1 {
         }
 
         var errors: [LeanMessage] { messages.filter { $0.severity == "error" } }
+
+        var sorryLocations: [LeanLocation] {
+            get { JSONColumn.decode([LeanLocation].self, from: sorryLocationsJSON) ?? [] }
+            set { sorryLocationsJSON = JSONColumn.encode(newValue) }
+        }
+
+        var sourceAuthor: Author? {
+            get { Author(kind: sourceAuthorKindRaw, id: sourceAuthorID) }
+            set { sourceAuthorKindRaw = newValue?.stored.kind; sourceAuthorID = newValue?.stored.id }
+        }
+
+        /// What the stored fields say about the axiom check.
+        var axiomCheck: AxiomCheck {
+            axiomCheckedDeclaration.isEmpty ? .notRun : .ran(declaration: axiomCheckedDeclaration, axioms: axioms)
+        }
 
         /// False when stored messages exist but cannot be decoded: then "no errors" would be a guess.
         var messagesAreReadable: Bool {

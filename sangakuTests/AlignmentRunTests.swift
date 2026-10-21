@@ -44,7 +44,7 @@ struct AlignmentRunTests {
 
         let record = try align()
         #expect(provider.requests.count == 1 && provider.requests[0].format == .alignment)
-        #expect(record.promptVersion == "aligner@1" && record.contextText.contains("[Attempt 1, to align]"))
+        #expect(record.promptVersion == "aligner@2" && record.contextText.contains("[Attempt 1, to align]"))
         #expect(record.message == nil && fixture.mainBranch.sortedMessages.count == messages, "nothing enters the thread")
         #expect(threads.streamingBranchIDs == [fixture.mainBranch.stableID])
         #expect(throws: SendBlocker.busy) { try align() }
@@ -207,7 +207,7 @@ struct AttemptQuestionTests {
         let prompt = try #require(fixture.mainBranch.sortedMessages.first { $0.stableID == reply.derivedFromIDs.first })
         #expect(prompt.kind == .prompt && prompt.derivedFromIDs == attempts && prompt.author == .human(fixture.you.personID))
         #expect(reply.kind == .reply && reply.author == .model(fixture.slotB.slotID))
-        #expect(reply.request?.promptVersion == "prover@1" && provider.requests.first?.format == nil)
+        #expect(reply.request?.promptVersion == "prover@2" && provider.requests.first?.format == nil)
         provider.reply(to: 0, "Here is a repaired step 5.")
         try await waitUntil { threads.live.isEmpty }
         #expect(try context.fetchCount(FetchDescriptor<StepRevision>()) == revisions, "only a person revises a step")
@@ -219,7 +219,7 @@ struct AttemptQuestionTests {
         let graph = fixture.state.graph.state(for: fixture.problem)
         let reply = try ask(fixture.slotC, "Which of the two steps 5 is right?")
         #expect(reply.kind == .refereeReply && reply.kind.authoringRole == .referee)
-        #expect(reply.request?.promptVersion == "referee-reply@1" && provider.requests.first?.format == nil)
+        #expect(reply.request?.promptVersion == "referee-reply@2" && provider.requests.first?.format == nil)
         provider.reply(to: 0, #"Attempt 1's step holds; Attempt 2's fails at $(p, q) = (2, 3)$."#)
         try await waitUntil { threads.live.isEmpty }
         #expect(try context.fetchCount(FetchDescriptor<RefereeVerdict>()) == verdicts)

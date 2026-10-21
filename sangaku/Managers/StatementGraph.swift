@@ -142,6 +142,40 @@ final class StatementGraph {
         changed(problem)
     }
 
+    // MARK: Refutations
+
+    /// A person accepts a computation's counterexample as refuting a statement (rule 1, invariant 1): the statement is
+    /// refuted, what uses it is capped, and every later prompt carries it as refuted with the person's note
+    /// (invariant 5). Only a completed run whose code reported a counterexample, on this statement, can refute it; the
+    /// note is the person's own words, never the tool's output.
+    func acceptRefutation(_ statementID: UUID, evidence evidenceID: UUID, note: String,
+                          in problem: Problem) throws(VerificationError) {
+        guard let statement = statement(statementID, in: problem) else { throw .noSuchStatement }
+        guard statement.refutationAcceptedByID == nil else { throw .alreadyRefuted }
+        guard let evidence = (statement.evidence ?? []).first(where: { $0.stableID == evidenceID }) else {
+            throw .noSuchEvidence
+        }
+        guard evidence.outcome == .completed, evidence.verdict == .counterexample else { throw .notACounterexample }
+        let note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !note.isEmpty else { throw .noteRequired }
+        statement.refutationEvidenceID = evidenceID
+        statement.refutationNote = note
+        statement.refutationAcceptedByID = problems.me().stableID
+        statement.refutationAcceptedAt = Timestamps.after(evidence.createdAt, now: .now)
+        changed(problem)
+    }
+
+    /// Undoes a person's acceptance of a refutation; the evidence stays.
+    func withdrawRefutation(_ statementID: UUID, in problem: Problem) throws(VerificationError) {
+        guard let statement = statement(statementID, in: problem) else { throw .noSuchStatement }
+        guard statement.refutationAcceptedByID != nil else { throw .notRefuted }
+        statement.refutationEvidenceID = nil
+        statement.refutationNote = nil
+        statement.refutationAcceptedByID = nil
+        statement.refutationAcceptedAt = nil
+        changed(problem)
+    }
+
     // MARK: Helpers
 
     private func changed(_ problem: Problem) {

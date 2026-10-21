@@ -2,20 +2,28 @@ import Foundation
 
 /// A structured output a request asks for, through the provider's JSON-schema output. A prose request has none.
 nonisolated enum OutputFormat: Hashable, Sendable {
-    /// A prover's attempt: an overview and numbered steps, each with what it establishes and a confidence label.
+    /// A prover's attempt: an overview and numbered steps, each with what it establishes, a confidence label and the
+    /// outside results it cites.
     case attempt
     /// A referee's verdict on each attempt, identified by the letter of the slot that wrote it, and a summary.
     case refereeVerdicts(letters: [String])
     /// Two attempts' steps paired by what they establish, each pair judged, and a summary. The attempts are named
     /// "Attempt 1" and "Attempt 2" only; a step number of 0 means none, an empty phrase means none.
     case alignment
+    /// A formalizer's Lean code for one statement: a note to the people reading it, the statement part (definitions,
+    /// then `theorem main` and its type) and the proof part (from `:=`).
+    case leanDraft
+    /// A scout's computation: a note, the tool (one of those that can run), the claim, its exact scope, the code.
+    case computeCell(tools: [String])
 
     /// Recorded with the request's parameters.
     var tag: String {
         switch self {
-        case .attempt: "proof-attempt@1"
+        case .attempt: "proof-attempt@2"
         case .refereeVerdicts: "referee-verdicts@1"
         case .alignment: "alignment@1"
+        case .leanDraft: "lean-draft@1"
+        case .computeCell: "compute-cell@1"
         }
     }
 
@@ -30,10 +38,11 @@ nonisolated enum OutputFormat: Hashable, Sendable {
             {"type":"object","additionalProperties":false,"required":["overview","steps"],"properties":{\#
             "overview":{"type":"string"},\#
             "steps":{"type":"array","items":{"type":"object","additionalProperties":false,\#
-            "required":["text","establishes","confidence"],"properties":{\#
+            "required":["text","establishes","confidence","citations"],"properties":{\#
             "text":{"type":"string"},\#
             "establishes":{"type":"string"},\#
-            "confidence":{"type":"string","enum":["standard","routine","delicate","guess"]}}}}}}
+            "confidence":{"type":"string","enum":["standard","routine","delicate","guess"]},\#
+            "citations":{"type":"array","items":{"type":"string"}}}}}}}
             """#
         case .refereeVerdicts(let letters):
             #"""
@@ -59,6 +68,22 @@ nonisolated enum OutputFormat: Hashable, Sendable {
             "phrase_2":{"type":"string"},\#
             "verdict":{"type":"string","enum":["equivalent","diverge","only_1","only_2"]}}}},\#
             "summary":{"type":"string"}}}
+            """#
+        case .leanDraft:
+            #"""
+            {"type":"object","additionalProperties":false,"required":["note","statement_part","proof_part"],"properties":{\#
+            "note":{"type":"string"},\#
+            "statement_part":{"type":"string"},\#
+            "proof_part":{"type":"string"}}}
+            """#
+        case .computeCell(let tools):
+            #"""
+            {"type":"object","additionalProperties":false,"required":["note","tool","claim","scope","code"],"properties":{\#
+            "note":{"type":"string"},\#
+            "tool":{"type":"string","enum":\#(Self.jsonArray(tools))},\#
+            "claim":{"type":"string"},\#
+            "scope":{"type":"string"},\#
+            "code":{"type":"string"}}}
             """#
         }
     }

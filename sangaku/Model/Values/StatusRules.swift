@@ -3,13 +3,20 @@ import Foundation
 /// Everything a statement's own status depends on, gathered from the store by `StatusInputs.make(for:people:)`.
 nonisolated struct StatusInputs: Hashable, Sendable {
     nonisolated struct Lean: Hashable, Sendable {
-        /// The check actually ran (`checkedAt` set, source present) and its messages could be read. Otherwise
-        /// "no errors, no axioms" would be indistinguishable from "never checked".
+        /// The check ran on exactly the stored source (`checkedAt` set, the digest matches, the statement part is
+        /// the start of the source) and its messages could be read. Otherwise "no errors" would be indistinguishable
+        /// from "never checked".
         var ran: Bool
         var errorCount: Int
         var sorryCount: Int
-        var axioms: [String]
-        /// A person's latest fidelity review of the *current* Lean statement says it matches.
+        /// The app's kernel check of this statement's declaration. An empty axiom list counts only when it reported.
+        var axiomCheck: AxiomCheck
+        /// The code names no other statement in its statement part, and in its proof only statements this one uses,
+        /// directly or through them. A result naming a statement it no longer uses (one deleted, or a dependency
+        /// removed) does not count, since the cap no longer covers it (invariant 13).
+        var namesOnlyUsed: Bool = true
+        /// A person's latest fidelity review of the *current* Lean statement, on the current informal wording, says
+        /// it matches.
         var fidelityConfirmed: Bool
     }
 
@@ -34,12 +41,18 @@ nonisolated enum StatusRules {
     /// The axioms a Lean proof may rely on (invariant 12). Anything else, `sorryAx` included, disqualifies it.
     static let standardAxioms: Set<String> = ["propext", "Classical.choice", "Quot.sound"]
 
+    /// Rule 2: the check ran on the stored source with no errors and no `sorry`, the kernel check reported its axioms
+    /// and every one is standard, its code names only what it uses, and a person confirmed the Lean statement. The one
+    /// test the status and every Lean card read, so they cannot disagree.
+    static func leanVerifies(_ lean: StatusInputs.Lean?) -> Bool {
+        guard let lean, lean.ran, lean.errorCount == 0, lean.sorryCount == 0, lean.fidelityConfirmed, lean.namesOnlyUsed,
+              case .ran(_, let axioms) = lean.axiomCheck else { return false }
+        return Set(axioms).isSubset(of: standardAxioms)
+    }
+
     static func ownStatus(_ inputs: StatusInputs) -> StatementStatus {
         if inputs.refutationAccepted { return .refuted }
-        if let lean = inputs.lean, lean.ran, lean.errorCount == 0, lean.sorryCount == 0,
-           Set(lean.axioms).isSubset(of: standardAxioms), lean.fidelityConfirmed {
-            return .formallyVerified
-        }
+        if leanVerifies(inputs.lean) { return .formallyVerified }
         if !inputs.sourceSteps.isEmpty,
            inputs.sourceSteps.allSatisfy({ $0.checkedOnCurrentRevision && !$0.hasOpenObjection }) {
             return .humanChecked
@@ -61,12 +74,22 @@ extension StatusInputs {
 
         if let result = statement.leanResult {
             let current = result.leanStatementSource
-            let latest = (statement.fidelityReviews ?? [])
-                .filter { isPerson($0.reviewerID) && !current.isEmpty && $0.leanStatementSource == current }
-                .max { $0.createdAt < $1.createdAt }
-            let ran = result.checkedAt != nil && !result.source.isEmpty && result.messagesAreReadable
+            let ran = result.checkedAt != nil && result.messagesAreReadable && !current.isEmpty
+                && result.source.hasPrefix(current) && result.checkedDigest == TextDigest(of: result.source).hex
+            // A result read for another statement's declaration never counts for this one.
+            let axiomCheck: AxiomCheck = switch result.axiomCheck {
+            case .ran(let name, _) where name == LeanNaming.declaration(for: statement.stableID): result.axiomCheck
+            default: .notRun
+            }
+            let reviews = (statement.fidelityReviews ?? []).map {
+                FidelityRule.Review(reviewer: $0.reviewerID, leanStatement: $0.leanStatementSource,
+                                    informal: $0.informalWording, verdict: $0.verdict, createdAt: $0.createdAt,
+                                    withdrawn: $0.withdrawnAt != nil)
+            }
             inputs.lean = Lean(ran: ran, errorCount: result.errors.count, sorryCount: result.sorryCount,
-                               axioms: result.axioms, fidelityConfirmed: latest?.verdict == .matches)
+                               axiomCheck: axiomCheck, namesOnlyUsed: statement.namesOnlyUsed(in: result.storedSource),
+                               fidelityConfirmed: FidelityRule.confirmed(reviews, people: people, leanStatement: current,
+                                                                         informal: statement.statementLaTeX))
         }
 
         let steps = make(sourceSteps: statement.sourceSteps ?? [], people: people)
@@ -148,4 +171,51 @@ extension ProofAttempt {
 
     /// The verdict that stands for this attempt (see `StatusRules.standingVerdict`).
     var standingVerdict: VerdictFact? { StatusRules.standingVerdict(verdictFacts) }
+}
+
+extension Statement {
+    /// Everything this statement uses, directly or through what those use.
+    var usesClosure: [Statement] {
+        var seen: Set<UUID> = [stableID]
+        var found: [Statement] = []
+        var queue = uses ?? []
+        while let next = queue.popLast() {
+            guard seen.insert(next.stableID).inserted else { continue }
+            found.append(next)
+            queue.append(contentsOf: next.uses ?? [])
+        }
+        return found
+    }
+
+    /// The statement part names no other statement's code, and the proof only this statement's and those it uses.
+    func namesOnlyUsed(in source: LeanSource?) -> Bool {
+        guard let source else { return true }
+        let own = LeanNaming.short(stableID)
+        let used = Set(usesClosure.map { LeanNaming.short($0.stableID) } + [own])
+        return LeanGate.references(in: source.statementPart).isSubset(of: [own])
+            && LeanGate.references(in: source.proofPart).isSubset(of: used)
+    }
+}
+
+/// Whether a person confirmed that a Lean statement says what the informal one says (invariant 12): of the people's
+/// reviews given on exactly this Lean statement and this informal wording and not withdrawn, the latest says it
+/// matches. Reviews given at the same instant stand together, so a tie confirms only if every one of them matches.
+nonisolated enum FidelityRule {
+    nonisolated struct Review: Hashable, Sendable {
+        var reviewer: UUID?
+        var leanStatement: String
+        var informal: String
+        var verdict: FidelityVerdict
+        var createdAt: Date
+        var withdrawn = false
+    }
+
+    static func confirmed(_ reviews: [Review], people: Set<UUID>, leanStatement: String, informal: String) -> Bool {
+        let current = reviews.filter {
+            $0.reviewer.map(people.contains) ?? false && !leanStatement.isEmpty && !$0.withdrawn
+                && $0.leanStatement == leanStatement && $0.informal == informal
+        }
+        guard let latest = current.map(\.createdAt).max() else { return false }
+        return current.filter { $0.createdAt == latest }.allSatisfy { $0.verdict == .matches }
+    }
 }

@@ -49,8 +49,9 @@ private struct ReviewBranch: View {
                                                  theoremSourceAttemptID: graphState?.pinned?.sources.first?.attemptID)
         if let chosen, let reviews,
            let attempt = visible.lazy.compactMap(\.proofAttempt).first(where: { $0.stableID == chosen }) {
-            ReviewScreen(attempt: attempt, state: reviews.state(of: attempt, people: personIDs), options: options,
-                         graph: graphState,
+            ReviewScreen(problem: problem, attempt: attempt, state: reviews.state(of: attempt, people: personIDs),
+                         options: options, graph: graphState,
+                         verification: VerificationState.read(problem: problem, people: personIDs),
                          authors: AuthorDirectory(problem: problem, people: people, catalog: threads?.catalog ?? .standard),
                          window: window)
         } else {
@@ -80,10 +81,12 @@ private enum ReviewSheet: Identifiable {
 /// The step list and its keyboard. One focusable container holds the steps: J, K, 1, 2, 3 and C act only while it
 /// has the keyboard, never while a text field does.
 private struct ReviewScreen: View {
+    let problem: Problem
     let attempt: ProofAttempt
     let state: AttemptReviewState
     let options: [AttemptOption]
     let graph: StatementGraphState?
+    let verification: VerificationState
     let authors: AuthorDirectory
     let window: WindowState
 
@@ -97,59 +100,70 @@ private struct ReviewScreen: View {
     @State private var pendingComment: UUID?
     /// Identifies this screen's actions, so they compare equal across renders.
     @State private var presenter = UUID()
+    /// The scroll view's width, never its content's (the layout rule).
+    @State private var width: CGFloat = 0
 
     var body: some View {
         let current = state[step: window.reviewStepID]?.id
         let listHasKeyboard = focus == .list
         let highlighted = window.review.highlightedStatementID.flatMap { graph?[$0] }
         let highlightedSteps = Set(highlighted?.sources.map(\.stepID) ?? [])
+        let citationFacts = CitationFact.read(attempt)
+        let citations = Dictionary(grouping: citationFacts, by: \.stepID)
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                ReviewHeader(theorem: graph?.pinned, options: options, chosen: state.attemptID, progress: state.progress,
-                             legend: ReviewWording.legend(state, authors: authors), authors: authors,
-                             highlight: highlighted?.label,
-                             onChoose: { window.chooseReview(attempt: $0) },
-                             onClearHighlight: { window.clearReviewHighlight() })
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(state.steps) { step in
-                        ReviewStepRow(step: step, authors: authors, isCurrent: step.id == current,
-                                      isActive: listHasKeyboard,
-                                      highlightLabel: highlightedSteps.contains(step.id) ? highlighted?.label : nil,
-                                      notice: notice?.stepID == step.id ? notice?.row : nil, focus: $focus)
-                            .id(step.id)
+            // The panel sits outside the step list's focus, so its controls never take J, K, 1, 2, 3 or C.
+            ReviewColumns(mode: ReviewLayoutMode.resolve(width: width)) {
+                VStack(alignment: .leading, spacing: 18) {
+                    ReviewHeader(theorem: graph?.pinned, options: options, chosen: state.attemptID, progress: state.progress,
+                                 legend: ReviewWording.legend(state, authors: authors), authors: authors,
+                                 highlight: highlighted?.label,
+                                 onChoose: { window.chooseReview(attempt: $0) },
+                                 onClearHighlight: { window.clearReviewHighlight() })
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(state.steps) { step in
+                            ReviewStepRow(step: step, authors: authors, isCurrent: step.id == current,
+                                          isActive: listHasKeyboard,
+                                          highlightLabel: highlightedSteps.contains(step.id) ? highlighted?.label : nil,
+                                          notice: notice?.stepID == step.id ? notice?.row : nil, focus: $focus,
+                                          citations: citations[step.id] ?? [])
+                                .id(step.id)
+                        }
+                    }
+                    .scrollTargetLayout()
+                    .padding(4)
+                    // With no current step, the list itself shows that it has the keyboard.
+                    .overlay {
+                        if listHasKeyboard && current == nil {
+                            RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor, lineWidth: 2)
+                        }
+                    }
+                    .focusable()
+                    .focused($focus, equals: .list)
+                    .focusEffectDisabled()
+                    .onKeyPress(characters: ReviewKeys.characters, phases: [.down, .repeat]) { press in
+                        handle(press, current: current)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Steps")
+                    .accessibilityRotor("Unchecked steps") {
+                        ForEach(state.uncheckedStepIDs, id: \.self) { id in
+                            AccessibilityRotorEntry(Text(rotorLabel(id)), id: id)
+                        }
+                    }
+                    .accessibilityRotor("Delicate steps") {
+                        ForEach(state.delicateStepIDs, id: \.self) { id in
+                            AccessibilityRotorEntry(Text(rotorLabel(id)), id: id)
+                        }
                     }
                 }
-                .scrollTargetLayout()
-                .padding(4)
-                // With no current step, the list itself shows that it has the keyboard.
-                .overlay {
-                    if listHasKeyboard && current == nil {
-                        RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor, lineWidth: 2)
-                    }
-                }
-                .focusable()
-                .focused($focus, equals: .list)
-                .focusEffectDisabled()
-                .onKeyPress(characters: ReviewKeys.characters, phases: [.down, .repeat]) { press in
-                    handle(press, current: current)
-                }
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel("Steps")
-                .accessibilityRotor("Unchecked steps") {
-                    ForEach(state.uncheckedStepIDs, id: \.self) { id in
-                        AccessibilityRotorEntry(Text(rotorLabel(id)), id: id)
-                    }
-                }
-                .accessibilityRotor("Delicate steps") {
-                    ForEach(state.delicateStepIDs, id: \.self) { id in
-                        AccessibilityRotorEntry(Text(rotorLabel(id)), id: id)
-                    }
-                }
+            } panel: {
+                VerificationPanel(problem: problem, attempt: attempt, graph: graph, verification: verification,
+                                  citations: citationFacts, currentStepID: current, authors: authors)
             }
             .padding(20)
-            .frame(maxWidth: 860)
             .frame(maxWidth: .infinity)
         }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width - 40 }, action: { width = $0 })
         .scrollPosition($position)
         .environment(\.reviewActions, ReviewActions(presenter: presenter) { perform($0) })
         .focusedSceneValue(\.reviewControl, ReviewControl(
@@ -321,3 +335,22 @@ private struct ReviewEmptyState: View {
     ReviewEmptyState(window: WindowState())
 }
 #endif
+
+/// The steps and the verification panel: side by side where both fit, else the panel below the steps. One layout that
+/// changes shape, so the steps keep their state and the list its keyboard focus when the width crosses the line.
+struct ReviewColumns<Steps: View, Panel: View>: View {
+    let mode: ReviewLayoutMode
+    @ViewBuilder let steps: Steps
+    @ViewBuilder let panel: Panel
+
+    var body: some View {
+        let sideBySide = mode == .sideBySide
+        let layout = sideBySide ? AnyLayout(HStackLayout(alignment: .top, spacing: ReviewLayoutMode.gap))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: 24))
+        layout {
+            steps.frame(maxWidth: 860)
+            panel.frame(width: sideBySide ? ReviewLayoutMode.panelWidth : nil)
+                .frame(maxWidth: sideBySide ? nil : 860)
+        }
+    }
+}

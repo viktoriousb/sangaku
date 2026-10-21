@@ -3,6 +3,66 @@
 Settled decisions, newest first. Each records what was decided, when, and why. Open questions stay in the spec's
 *Open decisions* list until they move here.
 
+## 2026-10-20: Milestone 8a architecture and choices
+
+- **Two passes.** Milestone 8 is built as 8a, verification, and 8b, export (LaTeX, Kerodon manuscript, Lean project,
+  AI-use statement). Chosen in the milestone's questions.
+- **Signing and entitlements.** No entitlements file: App Sandbox stays off so the app can run the person's own
+  `lean`, `gap`, `sage` and `python3`, each inside `sandbox-exec`; signing is unchanged. Hardened runtime and
+  notarization wait until the app goes to another Mac. Chosen in the milestone's questions; this settles the spec's
+  open decision for now.
+- **Architecture.** The "clean" blueprint, chosen at the architecture step.
+  - Three services instead of the spec's `VerificationService`: `LeanService`, `ComputeService` and `CitationService`,
+    each the one writer of what it records, on `ToolRunner` and `ProcessExecutor`.
+  - Trust by type: `Approval` (made only from a click's digest of what is stored or planned), `SandboxJob` (made only
+    by its factories, written code only from an `Approval`), and `LeanRegionOutcome` (made only by the reader), so
+    the compiler keeps the invariants' paths few.
+- **Who writes code.** A formalizer drafts Lean and a scout drafts computations; a person checks or runs them, on
+  the exact text shown (invariant 14). Models cite per step; citations are looked up only on a person's click.
+  Chosen in the milestone's questions.
+- **The sandbox.** Deny-default; the home folder is unreadable except a tool's installation, the Lean toolchain and
+  Mathlib, and the job's own run folder. A tool's installation is two levels above the program, but never the home
+  folder, a folder above it or one of its visible folders. Fetching Mathlib alone has the network and writes the
+  workspace and elan's folder. Limits on time, memory and what a run folder holds. Chosen in the milestone's
+  questions, made stricter by the review.
+- **Lean.**
+  - The workspace is a folder the person chooses in Settings (no default), marked as the app's, pinned to Lean
+    v4.35.0 and Mathlib v4.35.0; a folder holding anything else, hidden files included, is never taken over.
+    Fetching is a person's step.
+  - One module per problem, holding every statement's checked code with the candidate in its place. Chosen at the
+    architecture step. Each check writes it into a run folder of its own.
+  - **The kernel check.** Lean's own `#print axioms` can be answered by code in the module, so a check runs twice:
+    Lean compiles the module, then the app's `AxiomCheck.lean` reads the compiled module as data, replays every
+    declaration through the kernel on top of exactly the imports the app wrote, and reports each `main`'s axioms.
+    The review showed the first way forged with the real toolchain.
+  - **The gate is an allow-list** of what mathematics needs: no meta-programming, syntax, notation or literals, no
+    names in Lean's own namespaces, `local` instances only, short lists of attributes and options. It bounds what
+    code can do; the kernel check, not the gate, is what makes the axioms trustworthy.
+  - A statement part names no other statement's code, so what a statement says is all in what its fidelity review
+    compares; a proof names only statements its statement uses, so the cap by `uses` covers what it relies on. A
+    result that names a statement it no longer uses stops counting.
+  - When Lean reports errors there is nothing to replay: the statements with errors and the one checked are
+    recorded without axioms, and the others keep their last results. Anything that says nothing reliable records
+    nothing and says why.
+  - A fidelity review binds to the Lean statement and the informal wording shown; neither verdict is the sheet's
+    default; a person can withdraw their own review, which stays in the history.
+  - Editing a draft and checking it unchanged keeps the draft's author (invariant 7).
+- **Computations.** GAP, Sage and Python run the same way; GAP's runner is tested with a scripted executor, Python's
+  for real. A run is evidence over its scope, never a status; a reported counterexample refutes only when a person
+  accepts it, in their words. A run stopped before it starts records nothing.
+- **Citations.** arXiv, then zbMATH Open, one citation at a time with arXiv's pause; only the query shown is sent
+  (arXiv may get a narrower part of it after an empty answer). An answer that cannot be read, a failure, or a Stop
+  never makes a citation "not found", and an undecided lookup leaves an earlier decision as it was.
+- **Code is shown whole.** Approved code is never cut for display, and invisible or direction-changing characters
+  are refused, so what is read is what runs.
+- **Blind mode.** Asking a formalizer or a scout waits while blind mode is on in Compare, even after a verdict,
+  since its sheet lists the models.
+- **Prompts.** The role prompts now say a lemma's status is derived by the app, not given by people; every prompt
+  moved to a new version.
+- **Schema** (V1 edited in place): `LeanDraft`, `ComputeCell` and fields on `LeanResult`, `FidelityReview`,
+  `Evidence`, `Citation` and `Message`. The entities new in this milestone were reshaped before release. A copy of the
+  existing store opened with the new schema, without a reset.
+
 ## 2026-10-19: Milestone 7 architecture and choices
 
 - **Architecture.** The "clean" blueprint, chosen at the milestone's architecture step, with the trust guards of the

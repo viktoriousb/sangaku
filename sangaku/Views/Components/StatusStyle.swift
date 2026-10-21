@@ -27,6 +27,8 @@ nonisolated struct StatusStyle: Hashable, Sendable {
     var shortLabel = ""
     /// How strongly `fill` is laid on: a neutral tint (the main line) is the ink colour at low opacity.
     var fillOpacity = 1.0
+    /// The text it labels is struck through (a citation not found).
+    var strikesText = false
 
     /// The glyph's colour: the border's, except that unchecked grey is too faint for a glyph.
     var glyphToken: ColorToken { borderToken == .unchecked ? .secondaryInk : borderToken }

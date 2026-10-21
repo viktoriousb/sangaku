@@ -11,7 +11,7 @@ nonisolated enum SendBlocker: Error, Hashable, Sendable {
     case context(ContextError)
     /// The problem has slots, but none is a prover.
     case noProver
-    /// The slot's role cannot take this request (a referee asked for an attempt, a formalizer for anything yet).
+    /// The slot's role cannot take this request (a referee asked for an attempt, a formalizer for a reply).
     case slotCannotReceive(letter: String, role: SlotRole)
     /// One recipient of a fan-out cannot be sent its context.
     case recipient(letter: String, ContextError)

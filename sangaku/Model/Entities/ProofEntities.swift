@@ -152,15 +152,33 @@ extension SangakuSchemaV1 {
         var resolvedURL: String?
         var indexName: String?
         var step: Step?
+        /// Who cited it: a model in its attempt, or a person.
+        var authorKindRaw: String?
+        var authorID: UUID?
+        /// The last lookup: when, by whom, what was sent, the title of the matching document and what went wrong.
+        var checkedAt: Date?
+        var checkedByID: UUID?
+        var lastQuery: String?
+        var matchedTitle: String?
+        var lookupDetail: String?
+        /// Removed by a person: kept for provenance and hidden everywhere.
+        var removedAt: Date?
+        var removedByID: UUID?
 
-        init(rawText: String = "", status: CitationStatus = .unverified) {
+        init(rawText: String = "", status: CitationStatus = .unverified, author: Author? = nil) {
             self.rawText = rawText
             self.statusRaw = status.rawValue
+            self.author = author
         }
 
         var status: CitationStatus {
             get { CitationStatus(stored: statusRaw) }
             set { statusRaw = newValue.rawValue }
+        }
+
+        var author: Author? {
+            get { Author(kind: authorKindRaw, id: authorID) }
+            set { authorKindRaw = newValue?.stored.kind; authorID = newValue?.stored.id }
         }
     }
 

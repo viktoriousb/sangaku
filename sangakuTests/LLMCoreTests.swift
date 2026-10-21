@@ -68,7 +68,7 @@ struct PromptLibraryTests {
     @Test("The prover prompt is bundled and carries a version")
     func bundledProver() throws {
         let prompt = try #require(PromptLibrary.bundled.prompt(for: .prover))
-        #expect(prompt.versionTag == "prover@1")
+        #expect(prompt.versionTag == "prover@2")
         #expect(prompt.text.contains("$...$"))
         #expect(prompt.text.contains("Never claim to have run code"))
     }

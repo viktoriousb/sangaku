@@ -29,6 +29,18 @@ nonisolated struct URLSessionTransport: HTTPTransport {
         return URLSessionTransport(session: URLSession(configuration: configuration))
     }
 
+    /// For citation lookups: short timeouts, and the same absence of cache and cookies.
+    static func lookups() -> URLSessionTransport {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.waitsForConnectivity = false
+        configuration.timeoutIntervalForRequest = 15
+        configuration.timeoutIntervalForResource = 30
+        return URLSessionTransport(session: URLSession(configuration: configuration))
+    }
+
     @concurrent func open(_ request: URLRequest) async throws -> HTTPStreamResponse {
         let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {

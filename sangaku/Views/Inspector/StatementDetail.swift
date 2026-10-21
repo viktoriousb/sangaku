@@ -7,11 +7,16 @@ struct StatementDetail: View {
     let state: StatementGraphState
     let problem: Problem
     let authors: AuthorDirectory
+    /// The statement's Lean check and its runs, newest first, read by the parent.
+    let lean: LeanFacts?
+    let runs: [EvidenceFact]
     let onSelect: (UUID) -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     /// Opens Review on the statement's source steps.
     let onReview: () -> Void
+
+    @Environment(\.verificationActions) private var verification
 
     @Environment(\.statementGraph) private var graph
     @State private var failure: String?
@@ -50,6 +55,33 @@ struct StatementDetail: View {
                 GridRow {
                     heading("Written by")
                     Text(authors.name(of: node.author))
+                }
+                if let facts = lean {
+                    GridRow {
+                        heading("Lean")
+                        VStack(alignment: .leading, spacing: 2) {
+                            StatusBadge(style: StatusStyle.style(for: facts.standing))
+                            if facts.source != nil {
+                                Text([VerificationWording.sorries(facts.sorryLocations), VerificationWording.axioms(facts)]
+                                    .compactMap { $0 }.joined(separator: " "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+                if let latest = runs.first {
+                    GridRow {
+                        heading("Checks")
+                        VStack(alignment: .leading, spacing: 2) {
+                            StatusBadge(style: StatusStyle.style(outcome: latest.outcome, verdict: latest.verdict), compact: true)
+                            MathText(VerificationWording.runCount(runs.count) + VerificationWording.run(latest))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
             .font(.callout)
@@ -151,20 +183,33 @@ struct StatementDetail: View {
         }
     }
 
-    /// Status is derived, so no button sets one: Review Steps opens the steps where checking happens. Lean names the
-    /// milestone that brings it, in words a keyboard user sees too (a disabled button takes no focus).
+    /// Status is derived, so no button sets one: Review Steps opens the steps where checking happens; Lean and
+    /// computations run only when a person clicks Check or Run on exactly what will run.
     private var actions: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let statement = problem.statements?.first { $0.stableID == node.id }
+        return VStack(alignment: .leading, spacing: 6) {
             FlowLayout(spacing: 8, lineSpacing: 6) {
                 Button("Review Steps", action: onReview)
                     .disabled(node.sources.isEmpty)
                     .help(node.sources.isEmpty ? "\(node.label) has no source steps to review"
                                                : "Open the steps \(node.label) was promoted from in Review")
-                Button("Formalize in Lean") {}
-                    .disabled(true)
-                    .help("Lean arrives with Milestone 8 (Verification)")
+                Button("Formalize in Lean…") { verification?(.formalize(statement: node.id)) }
+                    .help("Ask a formalizer for the Lean statement and proof of \(node.label)")
+                if statement?.leanResult?.storedSource != nil {
+                    Button("Check Again…") { verification?(.checkLean(statement: node.id, candidate: .current, editing: false)) }
+                    Button("Confirm Statement…") { verification?(.confirmStatement(node.id)) }
+                }
+                Button("Ask for a Check…") {
+                    verification?(.askForCheck(ScoutSeed(claim: node.statementLaTeX, statements: [node.id])))
+                }
+                .help("Ask a scout for a computation that tests \(node.label)")
+                Button("Write a Computation…") { verification?(.writeCell(statement: node.id, basedOn: nil)) }
+                if statement?.refutationAcceptedByID != nil {
+                    Button("Withdraw Refutation") { verification?(.withdrawRefutation(statement: node.id)) }
+                }
             }
-            Text("Review Steps opens the source steps; checking happens there. No button sets a status. Lean arrives with Milestone 8.")
+            .disabled(verification == nil)
+            Text(VerificationWording.inspectorCaption)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             FlowLayout(spacing: 8, lineSpacing: 6) {

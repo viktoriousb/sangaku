@@ -4,6 +4,8 @@ nonisolated struct ParsedStep: Hashable, Sendable {
     var establishes: String
     var confidence: Confidence
     var text: String
+    /// The outside results the step cites, as the model wrote them. Unchecked (invariant 6).
+    var citations: [String] = []
 }
 
 nonisolated struct ParsedAttempt: Hashable, Sendable {
@@ -33,6 +35,8 @@ nonisolated enum AttemptParser {
         let establishes: String
         let confidence: String
         let text: String
+        /// Absent in output from before citations were asked for.
+        let citations: [String]?
     }
 
     private struct AttemptDTO: Decodable {
@@ -62,7 +66,20 @@ nonisolated enum AttemptParser {
     private static func step(_ dto: StepDTO) -> ParsedStep? {
         guard let confidence = Confidence(rawValue: dto.confidence),
               let establishes = clean(dto.establishes), let text = clean(dto.text) else { return nil }
-        return ParsedStep(establishes: establishes, confidence: confidence, text: text)
+        return ParsedStep(establishes: establishes, confidence: confidence, text: text,
+                          citations: citations(dto.citations ?? []))
+    }
+
+    /// The citations worth keeping: readable, not empty, at most 300 characters, each once, at most ten. One that
+    /// cannot be read is left out here and stays in the raw output.
+    static func citations(_ raw: [String]) -> [String] {
+        var kept: [String] = []
+        for citation in raw {
+            guard let text = clean(citation), !text.isEmpty, text.count <= 300, !kept.contains(text) else { continue }
+            kept.append(text)
+            if kept.count == 10 { break }
+        }
+        return kept
     }
 
     /// Trimmed, or nil when the string holds a control character (see the type's note).

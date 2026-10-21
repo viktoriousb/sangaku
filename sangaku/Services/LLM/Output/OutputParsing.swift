@@ -15,6 +15,14 @@ nonisolated enum OutputParsing {
         AlignmentParser.parse(text)
     }
 
+    @concurrent static func leanDraft(_ text: String) async -> LeanDraftReport? {
+        TaskOutputParser.leanDraft(text)
+    }
+
+    @concurrent static func computeCell(_ text: String, tools: [EvidenceTool]) async -> ComputeCellReport? {
+        TaskOutputParser.computeCell(text, tools: tools)
+    }
+
     @concurrent static func progress(_ text: String) async -> [ParsedStep] {
         AttemptParser.progress(text)
     }

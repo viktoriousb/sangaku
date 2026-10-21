@@ -12,6 +12,11 @@ struct ResolvePanel: View {
     let onHolds: @MainActor (HoldsVerdict) -> Void
     let onAsk: @MainActor (QuestionDraft) -> Void
     var onAdopt: @MainActor (UUID) -> Void = { _ in }
+    /// A scout's search on the row shown, and how to ask for it; nil where none can be asked.
+    var counterexample: ScoutSeed?
+    var onSearch: (@MainActor (ScoutSeed) -> Void)?
+    /// Blind mode is on: asking a scout waits until it is off, even after a verdict (invariant 9).
+    var searchWaits = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -19,7 +24,7 @@ struct ResolvePanel: View {
             verdict
             Divider()
             if identity.hidden {
-                Text("Asking a model about a row names the models. Record which attempt holds first, or turn blind mode off.")
+                Text(CompareWording.askWhileBlind)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else if let row {
@@ -36,13 +41,7 @@ struct ResolvePanel: View {
             }
             Divider()
             adopt
-            FlowLayout(spacing: 8, lineSpacing: 6) {
-                Button("Search for a Counterexample") {}
-                    .disabled(true)
-            }
-            Text("Counterexample searches arrive with Milestone 8.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            search
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,6 +92,26 @@ struct ResolvePanel: View {
             }
             Text(identity.hidden ? "Recording it reveals who wrote each attempt. It changes no check or status."
                                  : "Your verdict is kept with this comparison. It changes no check or status.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// A counterexample search asks a scout, whose sheet shows which models there are, so while blind mode is on it
+    /// waits, in words a keyboard user sees too (invariant 9).
+    @ViewBuilder private var search: some View {
+        if identity.hidden || searchWaits {
+            Text(VerificationWording.waitsWhileBlind)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else if let counterexample, let onSearch {
+            Button("Search for a Counterexample…") { onSearch(counterexample) }
+                .help("Ask a scout for a computation that tests this row's claims")
+            Text("A scout writes the computation; it runs only when you click Run on its code.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("Choose a row to search it for a counterexample.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

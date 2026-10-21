@@ -127,6 +127,18 @@ enum CompareWording {
         return lines.joined(separator: "\n\n")
     }
 
+    /// Why the row's requests wait while blind: asking a model about a row names the models in it.
+    static let askWhileBlind = "Asking a model about a row names the models. Record which attempt holds first, or turn blind mode off."
+
+    /// The claim a scout is asked to test for one row: the two steps, named only "Attempt 1" and "Attempt 2".
+    static func scoutClaim(_ row: CompareRow) -> String {
+        var lines = ["Two attempts part ways here. What the row establishes: \(row.label)."]
+        if let a = row.a { lines.append("Attempt 1, step \(a.index): \(a.text)") }
+        if let b = row.b { lines.append("Attempt 2, step \(b.index): \(b.text)") }
+        lines.append("Test these claims over an exact range, and report a counterexample to the one that fails.")
+        return lines.joined(separator: "\n\n")
+    }
+
     /// What is sent to the referee about one row. Shown, and editable, before it is sent.
     static func refereeRequest(_ row: CompareRow, identity: CompareIdentity) -> String {
         var lines = ["In Compare, one row of the two attempts asks for your judgement. What it establishes: \(row.label)"]

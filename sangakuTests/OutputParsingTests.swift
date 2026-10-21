@@ -225,18 +225,21 @@ struct OutputFormatTests {
         #expect(built.formatTokens > 0 && prose.formatTokens == 0, "the schema counts toward the input estimate")
     }
 
-    @Test("Role prompts: attempts and the referee have their own, with versions; prose replies keep prover@1")
+    @Test("Role prompts: attempts and the referee have their own, with versions; prose replies keep their own")
     func prompts() throws {
-        #expect(try #require(PromptLibrary.bundled.prompt(for: .prover)).versionTag == "prover@1")
+        #expect(try #require(PromptLibrary.bundled.prompt(for: .prover)).versionTag == "prover@2")
         let attempt = try #require(PromptLibrary.bundled.prompt(for: .prover, structured: true))
-        #expect(attempt.versionTag == "prover-attempt@2", "tagged by file, so it never collides with the prose prompt")
+        #expect(attempt.versionTag == "prover-attempt@4", "tagged by file, so it never collides with the prose prompt")
         #expect(attempt.text.contains(#"\\frac"#), "it asks for doubled backslashes")
         let referee = try #require(PromptLibrary.bundled.prompt(for: .referee, structured: true))
-        #expect(referee.versionTag == "referee@1")
+        #expect(referee.versionTag == "referee@2")
         #expect(referee.text.contains("never a check by a person"))
-        #expect(PromptLibrary.bundled.prompt(for: .formalizer) == nil, "formalizers have no prompt yet")
+        let formalizer = try #require(PromptLibrary.bundled.prompt(for: .formalizer, structured: true))
+        #expect(formalizer.versionTag == "formalizer@2" && formalizer.text.contains("`theorem main`"))
+        let scout = try #require(PromptLibrary.bundled.prompt(for: .scout, structured: true))
+        #expect(scout.versionTag == "scout@2" && scout.text.contains("sangaku-result: holds"))
         let aligner = try #require(PromptLibrary.bundled.prompt(named: "aligner", role: .referee))
-        #expect(aligner.versionTag == "aligner@1")
+        #expect(aligner.versionTag == "aligner@2")
         #expect(aligner.text.contains("Never guess or name who wrote them"))
     }
 }

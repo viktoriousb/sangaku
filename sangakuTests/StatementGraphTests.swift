@@ -58,12 +58,8 @@ struct StatementGraphFixtureTests {
 
     @Test("Invariant 13: a theorem verified in Lean still shows no more than what it uses")
     func leanTheoremIsCapped() {
-        let result = LeanResult(source: "theorem t : True := trivial", leanStatementSource: "theorem t : True",
-                                axioms: ["propext"])
-        result.checkedAt = .now
-        fixture.theorem.leanResult = result
-        fixture.theorem.fidelityReviews = [FidelityReview(reviewer: fixture.you.personID,
-                                                          leanStatementSource: "theorem t : True", verdict: .matches)]
+        fixture.theorem.recordLeanCheck(.trivial)
+        fixture.theorem.confirmLean(by: fixture.you.personID)
         let pinned = fixture.state.graph.state(for: fixture.problem).pinned
         #expect(pinned?.derived.own == .formallyVerified)
         #expect(pinned?.derived.displayed == .sketched)
@@ -292,9 +288,7 @@ struct StatementGraphManagerTests {
     func lockedStatement() throws {
         let problems = fixture.state.problems
         let theorem = fixture.theorem
-        let result = LeanResult(source: "theorem t : True := trivial", leanStatementSource: "theorem t : True")
-        result.checkedAt = .now
-        theorem.leanResult = result
+        theorem.recordLeanCheck(.trivial)
         let original = problem.statementLaTeX
         #expect(problems.statementIsLocked(problem))
         #expect(throws: StatementError.textLockedByLeanCheck) {

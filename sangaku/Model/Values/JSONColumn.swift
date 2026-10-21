@@ -15,12 +15,22 @@ nonisolated enum JSONColumn {
     }
 }
 
-/// One Lean diagnostic, as parsed from `lake env lean --json`.
+/// One Lean diagnostic, as parsed from `lean --json`. Lines are counted in the statement's own source (1 is its
+/// first line); 0 marks a message about the module around it. The later fields are optional, so older rows decode.
 nonisolated struct LeanMessage: Codable, Hashable, Sendable {
     var severity: String
     var line: Int
     var column: Int
     var text: String
+    var kind: String? = nil
+    var endLine: Int? = nil
+    var endColumn: Int? = nil
+}
+
+/// A place in a statement's Lean source: a `sorry`, say.
+nonisolated struct LeanLocation: Codable, Hashable, Sendable {
+    var line: Int
+    var column: Int
 }
 
 /// One row of a model's alignment of two attempts: the step of each attempt it pairs (side 1 is `stepAID`), what they

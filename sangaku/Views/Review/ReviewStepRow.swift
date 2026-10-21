@@ -14,6 +14,8 @@ struct ReviewStepRow: View {
     var highlightLabel: String?
     var notice: ReviewRowNotice?
     var focus: FocusState<ReviewFocus?>.Binding
+    /// What the step cites, as checked so far (invariant 6).
+    var citations: [CitationFact] = []
 
     @Environment(\.reviewActions) private var actions
     @Environment(\.reviewManager) private var reviews
@@ -61,6 +63,7 @@ struct ReviewStepRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    ForEach(citations) { CitationLine(fact: $0).font(.caption) }
                     FlowLayout(spacing: 6, lineSpacing: 6) {
                         ForEach(Array(ReviewWording.chips(for: step, authors: authors).enumerated()), id: \.offset) { _, style in
                             StatusBadge(style: style)

@@ -41,7 +41,8 @@ nonisolated enum BranchState: String, StoredEnum {
 nonisolated enum MessageKind: String, StoredEnum {
     /// `refereeReply` is a referee's prose answer to a question (about one row of a comparison, say): never a
     /// verdict on an attempt, which only `referee` messages give.
-    case prompt, reply, attempt, referee, refereeReply, compute, system
+    /// `leanDraft` is a formalizer's Lean code for a statement; `compute` carries a computation cell.
+    case prompt, reply, attempt, referee, refereeReply, compute, leanDraft, system
     static let fallback = MessageKind.system
 
     /// The role a model wrote this kind of message in. Provenance reads this, not the slot's current role, so
@@ -50,7 +51,9 @@ nonisolated enum MessageKind: String, StoredEnum {
         switch self {
         case .reply, .attempt: .prover
         case .referee, .refereeReply: .referee
-        case .prompt, .compute, .system: nil
+        case .leanDraft: .formalizer
+        case .compute: .scout
+        case .prompt, .system: nil
         }
     }
 }
@@ -100,6 +103,22 @@ nonisolated enum CitationStatus: String, StoredEnum {
 nonisolated enum EvidenceTool: String, StoredEnum {
     case gap, sage, python
     static let fallback = EvidenceTool.python
+}
+
+/// How a run of a computation ended, as the runner saw it. The fallback is the least informative case.
+nonisolated enum RunOutcome: String, StoredEnum {
+    /// The process exited with status 0.
+    case completed
+    case exitedNonzero, timedOut, memoryLimit, diskLimit, stopped
+    /// It started but ended without a readable exit, or could not be launched at all.
+    case couldNotRun
+    static let fallback = RunOutcome.couldNotRun
+}
+
+/// What a computation's own code reported (`CellOutputReader`): a report, never a proof.
+nonisolated enum CellVerdict: String, StoredEnum {
+    case holds, counterexample, inconclusive
+    static let fallback = CellVerdict.inconclusive
 }
 
 nonisolated enum AlignmentVerdict: String, StoredEnum {

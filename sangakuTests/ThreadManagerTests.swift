@@ -50,7 +50,7 @@ struct ThreadManagerTests {
         let record = try #require(reply.request)
         #expect(record.contextText.contains("Let $|G| = pq$ with $p < q$."))
         #expect(record.contextText.hasSuffix("Is the Sylow $q$-subgroup normal?"))
-        #expect(record.promptVersion == "prover@1")
+        #expect(record.promptVersion == "prover@2")
         #expect(record.finishedAt == nil)
         #expect(threads.streamingBranchIDs == [branch.stableID])
 
@@ -438,6 +438,8 @@ struct KeyAndWiringTests {
         #expect(Services.from(arguments: ["sangaku", "-SangakuFixture", "YES", "-SangakuDemoReplies", "YES"]) == .demo)
         #expect(Services.from(arguments: ["sangaku", "-SangakuFixtureLive", "YES"]) == .live)
         #expect(Services.from(arguments: ["sangaku", "-SangakuDemoReplies", "YES"]) == nil, "demo replies alone open no fixture")
+        #expect(Services.from(arguments: ["sangaku", "-SangakuFixtureVerified", "YES"]) == .offline,
+                "the verification example opens on its own, offline")
     }
 
     @Test("Provider policy: a new problem allows nothing; setting it is idempotent")

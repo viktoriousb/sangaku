@@ -116,8 +116,8 @@ private struct SlotMenu: View {
         switch role {
         case .prover: "Prover"
         case .referee: "Referee"
-        case .formalizer: "Formalizer (no prompt yet)"
-        case .scout: "Scout (no prompt yet)"
+        case .formalizer: "Formalizer"
+        case .scout: "Scout"
         }
     }
 }

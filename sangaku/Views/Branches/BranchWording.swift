@@ -37,6 +37,7 @@ enum BranchWording {
         case .referee: "referee message"
         case .reply, .refereeReply: "reply"
         case .compute: "computation"
+        case .leanDraft: "Lean draft"
         case .prompt, .system: "message"
         }
         return "\(author)'s \(noun)"

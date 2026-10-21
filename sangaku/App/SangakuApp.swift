@@ -7,8 +7,9 @@ struct SangakuApp: App {
 
     /// Debug builds launched with `-SangakuFixture YES` open the mockups' example in memory and never touch the
     /// store, the Keychain or the network. Add `-SangakuDemoReplies YES` to have replies streamed from a canned
-    /// answer. `-SangakuFixtureLive YES` instead opens the example with the real Keychain and network, to try real
-    /// prompts on it; the store stays in memory. `-SangakuDemoSend <text>` sends one message a second after
+    /// answer. `-SangakuFixtureVerified YES` opens the example with what verification adds (Lean drafts and results,
+    /// computations and citations), on its own or with the other flags. `-SangakuFixtureLive YES` instead opens the
+    /// example with the real Keychain and network, to try real prompts on it; the store stays in memory. `-SangakuDemoSend <text>` sends one message a second after
     /// launch, `-SangakuDemoFanOut <text>` sends it to A and B refereed by C (add `-SangakuDemoShared YES` for a
     /// shared fan-out), and `-SangakuDemoDraft <text>` starts with a draft in the composer.
     private static func makeState() -> AppState {
@@ -16,7 +17,8 @@ struct SangakuApp: App {
         DebugSnapshot.scheduleIfRequested()
         let arguments = CommandLine.arguments
         if let services = PreviewFixtures.Services.from(arguments: arguments) {
-            let fixture = PreviewFixtures.make(services: services)
+            let fixture = arguments.contains("-SangakuFixtureVerified") ? PreviewFixtures.makeVerified(services: services)
+                : PreviewFixtures.make(services: services)
             if let flag = arguments.firstIndex(of: "-SangakuDemoSend"), flag + 1 < arguments.count {
                 fixture.scheduleSend(arguments[flag + 1])
             }
@@ -40,6 +42,7 @@ struct SangakuApp: App {
                 .onAppear {
                     delegate.saves = app.saves
                     delegate.threads = app.threads
+                    delegate.tools = app.tools
                 }
         }
         .modelContainer(app.container)
@@ -58,8 +61,7 @@ struct SangakuApp: App {
         }
 
         Settings {
-            SettingsView()
-                .environment(\.credentialManager, app.credentials)
+            SettingsView().appEnvironment(app)
         }
     }
 }

@@ -57,6 +57,8 @@ final class ThreadManager {
             case referee(fanOutID: UUID, attempts: [AttemptRef])
             /// Keyed by its record's stable ID: an alignment has no message.
             case alignment(AlignmentBasis)
+            /// A formalizer's Lean draft or a scout's computation, for one statement.
+            case task(TaskBasis)
         }
 
         var state: State
@@ -77,6 +79,8 @@ final class ThreadManager {
         case attempt(AttemptParse)
         case referee(RefereeReport?)
         case alignment(AlignmentReport?)
+        case leanDraft(LeanDraftReport?)
+        case computeCell(ComputeCellReport?)
     }
 
     init(context: ModelContext, saves: SaveScheduler, problems: ProblemManager, credentials: CredentialManager,
@@ -370,6 +374,79 @@ final class ThreadManager {
         return ready.members[0].messageID
     }
 
+    // MARK: Formalizer and scout
+
+    /// What a formalizer's or a scout's request would send and cost, or why it cannot be sent now.
+    func taskPlan(_ basis: TaskBasis, slot slotID: UUID, problem: Problem, branch: Branch,
+                  effort: ThinkingEffort) -> Result<SendPlan.Recipient, SendBlocker> {
+        do throws(SendBlocker) {
+            let (prepared, slot) = try prepareTask(basis, slot: slotID, problem: problem, branch: branch, effort: effort)
+            return .success(SendPlanner.estimate(prepared, letter: slot.letter, env: environment(for: problem)))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    /// Asks a formalizer for Lean code, or a scout for a computation, for one statement. The model's message is written
+    /// on the branch, derived from the attempts the statement came from, and carries the draft or the cell once its
+    /// answer is read. Nothing runs and nothing is checked: a person clicks Check or Run on what they are shown
+    /// (invariants 1 and 14). Refused, writing nothing, when the branch is busy, the slot has another role, the
+    /// provider is not allowed (invariant 15), no key is stored, or an attempt is still being written (invariant 4).
+    @discardableResult
+    func requestTask(_ basis: TaskBasis, slot slotID: UUID, problem: Problem, branch: Branch,
+                     effort: ThinkingEffort) throws(SendBlocker) -> UUID {
+        let (prepared, slot) = try prepareTask(basis, slot: slotID, problem: problem, branch: branch, effort: effort)
+        let message = Message(author: .model(slot.id), kind: basis.messageKind)
+        message.createdAt = Timestamps.after(branch.visibleHistory.latestDate, now: now())
+        message.derivedFromIDs = basis.sourceMessageIDs
+        let record = RequestRecord()
+        record.createdAt = message.createdAt
+        describe(record, prepared, sent: true)
+        message.request = record
+        branch.messages = (branch.messages ?? []) + [message]
+        saves.markDirty()
+        start(prepared.request, messageID: message.stableID, problemID: problem.stableID, branchID: branch.stableID,
+              slot: slot.id, role: .task(basis))
+        return message.stableID
+    }
+
+    private func prepareTask(_ basis: TaskBasis, slot slotID: UUID, problem: Problem, branch: Branch,
+                             effort: ThinkingEffort) throws(SendBlocker) -> (PreparedRequest, ProblemSnapshot.SlotDigest) {
+        guard !streamingBranchIDs.contains(branch.stableID) else { throw .busy }
+        let running = basis.sourceMessageIDs.filter { live[$0] != nil }
+        guard running.isEmpty else { throw .context(.attemptsUnfinished(running)) }
+        let snapshot = snapshot(problem: problem, branch: branch)
+        guard let slot = snapshot.slots.first(where: { $0.id.rawValue == slotID }) else { throw .slotMissing }
+        let env = environment(for: problem)
+        try SendPlanner.checkProvider(of: slot, snapshot: snapshot, env: env)
+        let prepared = try RequestPreparer.prepare(RequestSpec(slot: slot, kind: .task(basis), effort: effort),
+                                                   snapshot: snapshot, env: env)
+        return (prepared, slot)
+    }
+
+    /// A formalizer's draft or a scout's cell, attached to its message; the note becomes the message's text. An answer
+    /// that cannot be read keeps its raw text and gets neither, so nothing can be checked or run from it.
+    private func apply(_ parsed: Parsed, to message: Message, basis: TaskBasis) {
+        guard let record = message.request else { return }
+        switch parsed {
+        case .leanDraft(let report?):
+            message.leanDraft = LeanDraft(statementID: basis.statementID, statementPart: report.source.statementPart,
+                                          proofPart: report.source.proofPart)
+            message.leanDraft?.createdAt = message.createdAt
+            message.bodyLaTeX = report.note
+            record.parseState = .clean
+        case .computeCell(let report?):
+            let cell = ComputeCell(tool: report.tool, code: report.code, scope: report.scope, claim: report.claim,
+                                   statementID: basis.statementID)
+            cell.createdAt = message.createdAt
+            message.computeCell = cell
+            message.bodyLaTeX = report.note
+            record.parseState = .clean
+        default:
+            record.parseState = .unstructured
+        }
+    }
+
     // MARK: Alignment
 
     /// What aligning two attempts would send and cost, or why it cannot be sent now. Nothing leaves the Mac.
@@ -592,11 +669,16 @@ final class ThreadManager {
             complete(id)
             return
         }
-        // A partial alignment is not read: it keeps its raw output, and the comparison keeps its earlier rows.
-        if case .alignment = request.role, outcome != .complete {
-            record.parseState = .unstructured
-            complete(id)
-            return
+        // A partial alignment is not read: it keeps its raw output, and the comparison keeps its earlier rows. Nor is
+        // a partial draft or cell: code cut off part way must never be checked or run.
+        switch request.role {
+        case .alignment, .task:
+            if outcome != .complete {
+                record.parseState = .unstructured
+                complete(id)
+                return
+            }
+        default: break
         }
         request.state = .settling
         request.task = nil
@@ -611,6 +693,8 @@ final class ThreadManager {
             let parsed: Parsed = switch role {
             case .referee: .referee(await OutputParsing.referee(text))
             case .alignment: .alignment(await OutputParsing.alignment(text))
+            case .task(.formalization): .leanDraft(await OutputParsing.leanDraft(text))
+            case .task(.scout(let basis)): .computeCell(await OutputParsing.computeCell(text, tools: basis.tools))
             case .reply, .attempt: .attempt(await OutputParsing.attempt(text, lenient: lenient))
             }
             self?.settle(id, parsed: parsed)
@@ -628,6 +712,10 @@ final class ThreadManager {
         let text = message.request?.rawOutput ?? message.bodyLaTeX
         if case .referee = request.role {
             settle(id, parsed: .referee(RefereeParser.parse(text)))
+        } else if case .task(.formalization) = request.role {
+            settle(id, parsed: .leanDraft(TaskOutputParser.leanDraft(text)))
+        } else if case .task(.scout(let basis)) = request.role {
+            settle(id, parsed: .computeCell(TaskOutputParser.computeCell(text, tools: basis.tools)))
         } else {
             settle(id, parsed: .attempt(AttemptParser.parse(text, lenient: message.outcome(isStreaming: false).isPartial)))
         }
@@ -650,6 +738,8 @@ final class ThreadManager {
                 apply(parse, to: message, author: request.slot)
             case (.referee(let fanOutID, let attempts), .referee(let report)):
                 apply(report, to: message, fanOutID: fanOutID, attempts: attempts, referee: request.slot)
+            case (.task(let basis), _):
+                apply(parsed, to: message, basis: basis)
             default:
                 break
             }
@@ -664,7 +754,7 @@ final class ThreadManager {
         live[id] = nil
         updateStreamingBranches()
         switch request.role {
-        case .reply, .alignment: break
+        case .reply, .alignment, .task: break
         case .attempt(let fanOutID): advance(fanOutID, .memberEnded(id))
         case .referee(let fanOutID, _): advance(fanOutID, .refereeEnded)
         }
@@ -706,6 +796,12 @@ final class ThreadManager {
                                                 establishes: parsedStep.establishes)
                     revision.createdAt = created
                     step.revisions = [revision]
+                    // A model's citations start unverified (invariant 6); a person checks them on a click.
+                    step.citations = parsedStep.citations.map { text in
+                        let citation = Citation(rawText: text, status: .unverified, author: .model(author))
+                        citation.createdAt = created
+                        return citation
+                    }
                     return step
                 }
             }

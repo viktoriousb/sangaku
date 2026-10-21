@@ -4,6 +4,8 @@ import SwiftUI
 /// shown.
 struct SettingsView: View {
     @Environment(\.credentialManager) private var credentials
+    @Environment(\.toolSettings) private var toolSettings
+    @Environment(\.leanService) private var lean
 
     var body: some View {
         Form {
@@ -17,9 +19,13 @@ struct SettingsView: View {
                 Text("The key is kept only in your login keychain. sangaku never shows it again and sends it only to Anthropic's API, with each request.")
                     .foregroundStyle(.secondary)
             }
+            if let toolSettings {
+                if let lean { LeanSettingsSection(lean: lean, settings: toolSettings) }
+                ToolSettingsSection(settings: toolSettings)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
+        .frame(width: 560)
         .fixedSize(horizontal: false, vertical: true)
         .task { await credentials?.refresh(ProviderID.anthropic) }
     }
@@ -113,5 +119,10 @@ private struct APIKeyRow: View {
 #Preview("Settings, no key") {
     SettingsView()
         .environment(\.credentialManager, CredentialManager(store: InMemorySecretStore()))
+        .environment(\.toolSettings, ToolSettings(storage: .memory()))
+}
+
+#Preview("Settings, with Lean") {
+    SettingsView().appEnvironment(PreviewFixtures.make().state)
 }
 #endif

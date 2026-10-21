@@ -93,8 +93,12 @@ private struct ProofStructure: View {
                         .foregroundStyle(ColorToken.refuted.color)
                 }
                 if let node = state[selectedID] {
+                    let statement = (problem.statements ?? []).first { $0.stableID == node.id }
+                    let personIDs = Set(people.map(\.stableID))
                     StatementDetail(node: node, state: state, problem: problem,
                                     authors: AuthorDirectory(problem: problem, people: people, catalog: .standard),
+                                    lean: statement.map { LeanFacts.read($0, people: personIDs) },
+                                    runs: statement.map { EvidenceFact.runs(of: $0, people: personIDs) } ?? [],
                                     onSelect: { window.selectedNodeID = $0 },
                                     onEdit: { editing = node },
                                     onDelete: { deleting = node },

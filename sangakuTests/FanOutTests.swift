@@ -210,9 +210,9 @@ struct FanOutManagerTests {
         #expect(Set((fanOut.attempts ?? []).compactMap(\.message?.stableID)) == Set(attempts.map(\.stableID)))
         for attempt in attempts {
             #expect(attempt.derivedFromIDs == [prompt.stableID])
-            #expect(attempt.request?.promptVersion == "prover-attempt@2")
+            #expect(attempt.request?.promptVersion == "prover-attempt@4")
             #expect(attempt.request?.contextText.hasSuffix("Prove that $G$ is cyclic.") == true)
-            #expect(JSONColumn.decode(RequestParameters.self, from: attempt.request?.parametersJSON)?.outputFormat == "proof-attempt@1")
+            #expect(JSONColumn.decode(RequestParameters.self, from: attempt.request?.parametersJSON)?.outputFormat == "proof-attempt@2")
         }
         #expect(provider.requests.count == 2)
         #expect(provider.requests.allSatisfy { $0.format == .attempt })
@@ -295,7 +295,7 @@ struct FanOutManagerTests {
         #expect(referee.kind == .referee)
         #expect(referee.author == .model(c.slotID))
         #expect(referee.derivedFromIDs == [branch.sortedMessages[0].stableID] + attempts.map(\.stableID))
-        #expect(referee.request?.promptVersion == "referee@1")
+        #expect(referee.request?.promptVersion == "referee@2")
 
         provider.reply(to: 2, refereeReport([("A", .complete, []), ("B", .gap, [2])]))
         try await waitUntil { threads.live.isEmpty }
@@ -496,7 +496,7 @@ struct FanOutManagerTests {
         try threads.send(problem: problem, branch: branch, draft: draft)
         #expect(branch.sortedMessages.last?.kind == .reply)
         #expect(provider.requests.last?.format == nil)
-        #expect(branch.sortedMessages.last?.request?.promptVersion == "prover@1")
+        #expect(branch.sortedMessages.last?.request?.promptVersion == "prover@2")
     }
 
     @Test("Quitting reads what arrived at once and starts no referee")

@@ -82,10 +82,11 @@ enum PreviewFixtures {
         /// example problem, with the key stored in Settings. Each one is billed; none is kept after quitting.
         case live
 
-        /// From the launch arguments; nil when no fixture is asked for.
+        /// From the launch arguments; nil when no fixture is asked for. `-SangakuFixtureVerified YES` asks for the
+        /// verification example, on its own or with the others.
         static func from(arguments: [String]) -> Services? {
             if arguments.contains("-SangakuFixtureLive") { return .live }
-            guard arguments.contains("-SangakuFixture") else { return nil }
+            guard arguments.contains("-SangakuFixture") || arguments.contains("-SangakuFixtureVerified") else { return nil }
             return arguments.contains("-SangakuDemoReplies") ? .demo : .offline
         }
     }
@@ -213,9 +214,14 @@ enum PreviewFixtures {
                                                                     ("B", .gap, [5], verdictB.rationale)]),
             usage: TokenUsage(input: 9_120, cacheWrite: 0, cacheRead: 0, output: 2_840))
 
-        let sweep = Message(author: byA, bodyLaTeX: gapSweepCode, kind: .compute)
+        // You wrote the GAP sweep after reading A's attempt, and ran it (the run is recorded below).
+        let sweep = Message(author: byYou, bodyLaTeX: "", kind: .compute)
         sweep.derivedFromIDs = [messageA.stableID]
         sweep.createdAt = Date(timeIntervalSinceReferenceDate: 800_000_000 + 240)
+        let sweepCell = ComputeCell(tool: .gap, code: gapSweepCode, scope: "every group of each order p²q ≤ 100 (15 orders)",
+                                    claim: "Every group of order $p^2 q$ has a normal Sylow subgroup.")
+        sweepCell.createdAt = sweep.createdAt
+        sweep.computeCell = sweepCell
         main.messages = (main.messages ?? []) + [sweep]
 
         // Review state, on the morning after the fan-out: steps 1–4 checked (step 2 by MK), step 5 open ?, step 6
@@ -266,7 +272,7 @@ enum PreviewFixtures {
         let refuted = Statement(kind: .claim, label: "Claim", statementLaTeX: #"$n_q = p$ is possible."#, author: byB)
         refuted.refutationNote = #"$n_q = p$ needs $p \equiv 1 \pmod{q}$, impossible since $p < q$."#
         refuted.refutationAcceptedByID = you.stableID
-        refuted.refutationAcceptedAt = Date.now
+        refuted.refutationAcceptedAt = day(11, 40)
         let conjecture = Statement(kind: .conjecture, label: "Conj", statementLaTeX: #"If $|G| = p^2 q^2$, then $G$ has a normal Sylow subgroup."#, author: byYou)
         // Promoted by people after the referee's pass, to show the cap at work.
         let lemma5 = Statement(kind: .lemma, label: "Lem 5", statementLaTeX: #"The case $n_p = q$, $n_q = p^2$ does not occur."#, author: Author.human(mk.personID))
@@ -292,21 +298,40 @@ enum PreviewFixtures {
         lemma7.sourceSteps = [stepsA[2]]
         lemma7.uses = [lemma6]
 
+        // Lean checks of the morning after, in one module: Lem 1–3 and 5 with standard axioms, Lem 4 with a sorry.
         let standard = ["propext", "Classical.choice", "Quot.sound"]
-        lemma1.leanResult = lean("theorem sylow_counts (hG : Nat.card G = p ^ 2 * q) : …", axioms: standard)
-        lemma1.fidelityReviews = [FidelityReview(reviewer: you.personID, leanStatementSource: lemma1.leanResult!.leanStatementSource, verdict: .matches)]
-        lemma2.leanResult = lean("theorem q_gt_p (h : ¬ ∃ r, (Sylow r G).Normal) : q > p", axioms: standard)
-        lemma3.leanResult = lean("theorem p_q_eq (hp : n_p = q) (hq : n_q = p ^ 2) : (p, q) = (2, 3)", axioms: standard)
-        let lemma4Lean = lean("lemma order_twelve (hG : Nat.card G = 12) : ∃ p (P : Sylow p G), (P : Subgroup G).Normal",
-                              axioms: standard + ["sorryAx"], sorry: 1)
-        lemma4Lean.messages = [LeanMessage(severity: "warning", line: 4, column: 2, text: "declaration uses 'sorry'")]
-        lemma4.leanResult = lemma4Lean
-        lemma5.leanResult = lean("theorem case_excluded (hp : n_p = q) (hq : n_q = p ^ 2) : False", axioms: standard)
-        lemma5.fidelityReviews = [FidelityReview(reviewer: mk.personID, leanStatementSource: lemma5.leanResult!.leanStatementSource, verdict: .matches)]
+        let checks: [(Statement, LeanSource, [String], [LeanMessage])] = [
+            (lemma1, LeanFixtureCode.lemma1, standard, []), (lemma2, LeanFixtureCode.lemma2, standard, []),
+            (lemma3, LeanFixtureCode.lemma3, standard, []),
+            (lemma4, LeanFixtureCode.lemma4, standard + ["sorryAx"],
+             [LeanMessage(severity: "warning", line: 1, column: 8, text: "declaration uses 'sorry'", kind: "hasSorry")]),
+            (lemma5, LeanFixtureCode.lemma5, standard, []),
+        ]
+        let module = LeanModulePlan(checks.map { ($0.0.stableID, $0.1) }).digest
+        for (offset, (statement, source, axioms, messages)) in checks.enumerated() {
+            let result = LeanResult()
+            result.createdAt = day(11, 30)
+            result.record(.fixture(statementID: statement.stableID, source: source, axioms: axioms, messages: messages),
+                          module: module, environment: LeanFixtureCode.environment, checkedBy: you.stableID,
+                          sourceAuthor: byA, draftMessageID: nil, duration: 41 + Double(offset), at: day(11, 30))
+            statement.leanResult = result
+        }
+        lemma1.fidelityReviews = [fidelity(lemma1, by: you, at: day(11, 32))]
+        lemma5.fidelityReviews = [fidelity(lemma5, by: mk, at: day(11, 33))]
 
-        theorem.evidence = [Evidence(tool: .gap, code: gapSweepCode, output: "true", passed: true,
-                                     scope: "every group of each order p²q ≤ 100 (15 orders)")]
-        theorem.evidence?.first?.toolVersion = "GAP 4"
+        // You ran the GAP sweep the evening of the fan-out.
+        let sweepRun = Evidence(tool: .gap, code: gapSweepCode, output: "true", passed: true,
+                                scope: "every group of each order p²q ≤ 100 (15 orders)")
+        sweepRun.toolVersion = "GAP 4"
+        sweepRun.createdAt = Date(timeIntervalSinceReferenceDate: 800_000_000 + 260)
+        sweepRun.startedAt = Date(timeIntervalSinceReferenceDate: 800_000_000 + 250)
+        sweepRun.durationSeconds = 9
+        sweepRun.outcome = .completed
+        sweepRun.verdict = .holds
+        sweepRun.runByID = you.stableID
+        theorem.evidence = [sweepRun]
+        sweepCell.statementID = theorem.stableID
+        sweepRun.cell = sweepCell
 
         // A plain exchange with A after the fan-out: a complete reply, a stopped one and a failed one.
         let (plainQuestion, reply) = exchange(
@@ -403,6 +428,113 @@ enum PreviewFixtures {
                        classEquation: classEquation, deadEndReply: deadEndReply, induction: induction,
                        inductionAttempt: inductionAttempt, parked: complement, fork: fork, forkReply: forkReply)
     }
+
+    /// The example with what verification adds: a formalizer D and a scout E; D's Lean draft for Lem 6 waiting for
+    /// Check; Lem 7 checked with an error; E's Python cell for Claim 2, run by You, its code reporting a
+    /// counterexample nobody has accepted; a timed-out run of the GAP sweep; an unchecked citation and one whose
+    /// lookup failed. `-SangakuFixtureVerified YES` opens it.
+    static func makeVerified(services: Services = .offline) -> Handles {
+        let fixture = make(services: services)
+        let context = fixture.state.container.mainContext
+        let problem = fixture.problem
+        let slotD = slot("D", .formalizer, .modelC, "claude-opus-5-5")
+        let slotE = slot("E", .scout, .modelB, "claude-sonnet-5-5")
+        problem.modelSlots = (problem.modelSlots ?? []) + [slotD, slotE]
+
+        let draft = Message(author: .model(slotD.slotID), bodyLaTeX: "Reads $q \\mid p - 1$ as divisibility in $\\mathbb{N}$; the Sylow count is `Nat.card (Sylow q G)`.",
+                            kind: .leanDraft)
+        draft.createdAt = day(11, 50)
+        context.insert(draft)
+        draft.leanDraft = LeanDraft(statementID: fixture.onRefutedClaim.stableID, statementPart: LeanFixtureCode.lemma6.statementPart,
+                                    proofPart: LeanFixtureCode.lemma6.proofPart)
+        draft.leanDraft?.createdAt = draft.createdAt
+
+        let failed = LeanResult()
+        failed.createdAt = day(11, 52)
+        context.insert(failed)
+        failed.record(.fixture(statementID: fixture.belowRefuted.stableID, source: LeanFixtureCode.lemma7, axioms: ["sorryAx"],
+                               messages: [LeanMessage(severity: "error", line: 3, column: 2,
+                                                      text: "unknown identifier 'Sylow.card_eq_p'", kind: "[anonymous]")]),
+                      module: TextDigest(of: "fixture"), environment: LeanFixtureCode.environment,
+                      checkedBy: fixture.you.stableID, sourceAuthor: .human(fixture.you.personID), draftMessageID: nil,
+                      duration: 38, at: day(11, 52))
+        fixture.belowRefuted.leanResult = failed
+
+        let claim = Statement(kind: .claim, label: "Claim 2",
+                              statementLaTeX: "In every group of order $p^2 q$, the Sylow $q$-subgroup is normal.",
+                              author: .model(fixture.slotB.slotID))
+        claim.createdAt = day(11, 54)
+        context.insert(claim)
+        problem.statements = (problem.statements ?? []) + [claim]
+        let scout = Message(author: .model(slotE.slotID), bodyLaTeX: "Counts the Sylow $3$-subgroups of $A_4$, the smallest case with $p = 2$, $q = 3$.",
+                            kind: .compute)
+        scout.createdAt = day(11, 56)
+        context.insert(scout)
+        let cell = ComputeCell(tool: .python, code: alternatingGroupCode, scope: "the alternating group $A_4$ (order 12)",
+                               claim: "The Sylow 3-subgroup of a group of order 12 is normal.", statementID: claim.stableID)
+        cell.createdAt = scout.createdAt
+        scout.computeCell = cell
+        let run = Evidence(tool: .python, code: alternatingGroupCode,
+                           output: "Sylow 3-subgroups of A4: 4\nsangaku-result: counterexample A4 has 4 Sylow 3-subgroups\n",
+                           passed: false, scope: cell.scope)
+        run.createdAt = day(11, 58)
+        run.startedAt = day(11, 57)
+        run.durationSeconds = 0.4
+        run.outcome = .completed
+        run.verdict = .counterexample
+        run.runByID = fixture.you.stableID
+        run.toolVersion = "Python 3.15.0"
+        context.insert(run)
+        run.cell = cell
+        claim.evidence = [run]
+
+        let timedOut = Evidence(tool: .gap, code: gapSweepCode, output: "", passed: false,
+                                scope: "every group of each order p²q ≤ 200")
+        timedOut.createdAt = day(12, 5)
+        timedOut.startedAt = day(12, 3)
+        timedOut.durationSeconds = 120
+        timedOut.outcome = .timedOut
+        timedOut.runByID = fixture.you.stableID
+        context.insert(timedOut)
+        fixture.theorem.evidence = (fixture.theorem.evidence ?? []) + [timedOut]
+        fixture.mainBranch.messages = (fixture.mainBranch.messages ?? []) + [draft, scout]
+
+        let steps = fixture.attemptA.sortedSteps
+        let unchecked = Citation(rawText: "Sylow, Théorèmes sur les groupes de substitutions, Math. Ann. 5 (1872)",
+                                 status: .unverified, author: .model(fixture.slotA.slotID))
+        unchecked.createdAt = day(11, 0)
+        let undecided = Citation(rawText: "Burnside, Theory of Groups of Finite Order, 2nd ed. (1911), §243",
+                                 status: .unverified, author: .human(fixture.you.personID))
+        undecided.createdAt = day(11, 1)
+        undecided.checkedAt = day(11, 2)
+        undecided.lookupDetail = "arXiv: timed out; zbMATH Open: offline"
+        steps[2].citations = (steps[2].citations ?? []) + [unchecked]
+        steps[3].citations = (steps[3].citations ?? []) + [undecided]
+        try? context.save()
+        return fixture
+    }
+
+    /// Python that counts the Sylow 3-subgroups of $A_4$, self-contained.
+    static let alternatingGroupCode = """
+    from itertools import permutations
+
+    def compose(a, b):
+        return tuple(a[b[i]] for i in range(4))
+
+    def is_even(p):
+        inversions = sum(1 for i in range(4) for j in range(i + 1, 4) if p[i] > p[j])
+        return inversions % 2 == 0
+
+    identity = (0, 1, 2, 3)
+    a4 = [p for p in permutations(range(4)) if is_even(p)]
+    order_three = [p for p in a4 if p != identity and compose(p, compose(p, p)) == identity]
+    subgroups = {frozenset([identity, p, compose(p, p)]) for p in order_three}
+    print(f"Sylow 3-subgroups of A4: {len(subgroups)}")
+    if len(subgroups) > 1:
+        print(f"sangaku-result: counterexample A4 has {len(subgroups)} Sylow 3-subgroups")
+    else:
+        print("sangaku-result: holds")
+    """
 
     /// The example with a lemma salvaged from a dead end: step 2 of B's attempt on Induction on |G| ("q > p"),
     /// promoted by You as Lem 8.
@@ -571,10 +703,14 @@ enum PreviewFixtures {
         Date(timeIntervalSinceReferenceDate: 799_977_600 + Double(hour * 3600 + minute * 60))
     }
 
-    private static func lean(_ statement: String, axioms: [String], sorry: Int = 0) -> LeanResult {
-        let result = LeanResult(source: statement + " := by\n  …", leanStatementSource: statement, sorryCount: sorry, axioms: axioms)
-        result.checkedAt = Date.now
-        return result
+    /// A person's confirmation that a statement's checked Lean statement says what its wording says.
+    private static func fidelity(_ statement: Statement, by person: Person, at date: Date) -> FidelityReview {
+        let review = FidelityReview(reviewer: person.personID,
+                                    leanStatementSource: statement.leanResult?.leanStatementSource ?? "",
+                                    verdict: .matches)
+        review.informalWording = statement.statementLaTeX
+        review.createdAt = date
+        return review
     }
 }
 
@@ -600,6 +736,17 @@ struct SalvagedFixturePreview: PreviewModifier {
     }
 }
 
+/// The same with what verification adds (`PreviewFixtures.makeVerified`).
+struct VerifiedFixturePreview: PreviewModifier {
+    static func makeSharedContext() async throws -> PreviewFixtures.Handles {
+        PreviewFixtures.makeVerified()
+    }
+
+    func body(content: Content, context: PreviewFixtures.Handles) -> some View {
+        content.fixtureEnvironment(context)
+    }
+}
+
 private extension View {
     func fixtureEnvironment(_ fixture: PreviewFixtures.Handles) -> some View {
         appEnvironment(fixture.state)
@@ -611,5 +758,6 @@ private extension View {
 extension PreviewTrait where T == Preview.ViewTraits {
     static var fixture: Self { .modifier(FixturePreview()) }
     static var salvagedFixture: Self { .modifier(SalvagedFixturePreview()) }
+    static var verifiedFixture: Self { .modifier(VerifiedFixturePreview()) }
 }
 #endif

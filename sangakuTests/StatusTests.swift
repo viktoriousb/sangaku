@@ -49,7 +49,9 @@ struct StatusStyleTests {
 @Suite("Status rules")
 struct StatusRulesTests {
     private let checked = StatusInputs.SourceStep(checkedOnCurrentRevision: true, hasOpenObjection: false)
-    private let goodLean = StatusInputs.Lean(ran: true, errorCount: 0, sorryCount: 0, axioms: ["propext", "Quot.sound"], fidelityConfirmed: true)
+    private let goodLean = StatusInputs.Lean(ran: true, errorCount: 0, sorryCount: 0,
+                                             axiomCheck: .ran(declaration: "Sangaku.S0.main", axioms: ["propext", "Quot.sound"]),
+                                             fidelityConfirmed: true)
 
     @Test func precedence() {
         #expect(StatusRules.ownStatus(StatusInputs()) == .proposed)
@@ -66,8 +68,15 @@ struct StatusRulesTests {
     @Test("Invariant 12: Lean counts only with standard axioms and a person's fidelity check")
     func leanIsCheckedNotTrusted() {
         var lean = goodLean
-        lean.axioms.append("sorryAx")
+        lean.axiomCheck = .ran(declaration: "Sangaku.S0.main", axioms: ["propext", "sorryAx"])
         #expect(StatusRules.ownStatus(StatusInputs(lean: lean)) == .proposed)
+        lean.axiomCheck = .ran(declaration: "Sangaku.S0.main", axioms: ["Lean.ofReduceBool"])
+        #expect(StatusRules.ownStatus(StatusInputs(lean: lean)) == .proposed)
+        // "Does not depend on any axioms" counts, but only when the axiom line was read.
+        lean.axiomCheck = .ran(declaration: "Sangaku.S0.main", axioms: [])
+        #expect(StatusRules.ownStatus(StatusInputs(lean: lean)) == .formallyVerified)
+        lean.axiomCheck = .notRun
+        #expect(StatusRules.ownStatus(StatusInputs(lean: lean)) == .proposed, "an empty list from no check is not a result")
         lean = goodLean
         lean.fidelityConfirmed = false
         #expect(StatusRules.ownStatus(StatusInputs(lean: lean)) == .proposed)

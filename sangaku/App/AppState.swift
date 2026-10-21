@@ -14,6 +14,11 @@ final class AppState {
     let credentials: CredentialManager
     let threads: ThreadManager
     let branches: BranchManager
+    let toolSettings: ToolSettings
+    let tools: ToolRunner
+    let lean: LeanService
+    let compute: ComputeService
+    let citations: CitationService
 
     private var observers: [NSObjectProtocol] = []
 
@@ -22,10 +27,12 @@ final class AppState {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
-    /// `secrets` and `transport` default to the real Keychain and network only for the real store; tests,
-    /// previews and the fixture get an in-memory store and no network.
+    /// `secrets`, `transport`, `executor` and `toolStorage` default to the real Keychain, network, processes and
+    /// preferences only for the real store; tests, previews and the fixture get an in-memory store, no network, no
+    /// tools and settings in memory.
     init(storage: ModelContainerFactory.Storage? = nil, secrets: (any SecretStore)? = nil,
-         transport: (any HTTPTransport)? = nil) {
+         transport: (any HTTPTransport)? = nil, executor: (any ToolExecuting)? = nil,
+         toolStorage: ToolSettings.Storage? = nil, lookupTransport: (any HTTPTransport)? = nil) {
         let resolved: ModelContainerFactory.Storage
         if let storage {
             resolved = storage
@@ -62,9 +69,36 @@ final class AppState {
         threads = ThreadManager(
             context: container.mainContext, saves: saves, problems: problems, credentials: credentials,
             registry: ProviderRegistry([AnthropicProvider(transport: httpTransport, secrets: secretStore)]))
-        problems.willDelete = { [threads] problemID in threads.cancelAll(problemID: problemID) }
         branches = BranchManager(context: container.mainContext, saves: saves, problems: problems, statements: graph,
                                  activity: threads)
+
+        let workRoot = isLive
+            ? URL.applicationSupportDirectory.appending(path: "sangaku").appending(path: "Work")
+            : FileManager.default.temporaryDirectory.appending(path: "sangaku-work-" + UUID().uuidString)
+        toolSettings = ToolSettings(storage: toolStorage ?? (isLive ? .preferences : .memory()))
+        tools = ToolRunner(executor: executor ?? (isLive ? ProcessExecutor(runningFolder: workRoot.appending(path: "running"))
+                                                         : RefusingExecutor()),
+                           workRoot: workRoot)
+        // A crash may have left a check or a computation running, and its folder: stop it and clear them before
+        // anything else starts.
+        if isLive {
+            ProcessExecutor.reapOrphans(in: tools.runningFolder)
+            tools.removeLeftoverRunFolders()
+        }
+        lean = LeanService(context: container.mainContext, saves: saves, problems: problems, tools: tools,
+                           settings: toolSettings, announce: VoiceOver.announce)
+        lean.refreshWorkspace()
+        compute = ComputeService(context: container.mainContext, saves: saves, problems: problems, tools: tools,
+                                 settings: toolSettings, announce: VoiceOver.announce)
+        let lookups = lookupTransport ?? (isLive ? URLSessionTransport.lookups() : UnavailableTransport())
+        citations = CitationService(context: container.mainContext, saves: saves, problems: problems,
+                                    client: CitationLookupClient(transport: lookups), announce: VoiceOver.announce)
+        problems.willDelete = { [threads, tools, lean, compute] problemID in
+            threads.cancelAll(problemID: problemID)
+            lean.stopCheck(problem: problemID)
+            compute.cancelAll(problemID: problemID)
+            tools.cancelAll(problemID: problemID)
+        }
 
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [saves] _ in
@@ -95,19 +129,27 @@ final class AppState {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var saves: SaveScheduler?
     var threads: ThreadManager?
+    var tools: ToolRunner?
 
+    /// Saves first and asks if that failed, so Don't Quit leaves everything running; only then stops replies (kept as
+    /// interrupted) and tools, and saves what stopping changed.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        saves?.flush()
+        if let error = saves?.lastError, !Self.quitAnyway(error) { return .terminateCancel }
         threads?.stopAllForQuit()
-        guard let saves else { return .terminateNow }
-        saves.flush()
-        guard let error = saves.lastError else { return .terminateNow }
+        tools?.stopAllForQuit()
+        saves?.flush()
+        return .terminateNow
+    }
+
+    private static func quitAnyway(_ error: String) -> Bool {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Your latest changes could not be saved."
         alert.informativeText = error
         alert.addButton(withTitle: "Don't Quit")
         alert.addButton(withTitle: "Quit Anyway")
-        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+        return alert.runModal() == .alertSecondButtonReturn
     }
 }
 
@@ -123,5 +165,9 @@ extension View {
             .environment(\.alignmentService, state.alignments)
             .environment(\.branchManager, state.branches)
             .environment(\.credentialManager, state.credentials)
+            .environment(\.toolSettings, state.toolSettings)
+            .environment(\.leanService, state.lean)
+            .environment(\.computeService, state.compute)
+            .environment(\.citationService, state.citations)
     }
 }

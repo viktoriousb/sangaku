@@ -21,7 +21,7 @@ nonisolated enum SangakuSchemaV1: VersionedSchema {
             Branch.self, Message.self, RequestRecord.self, FanOut.self, RefereeVerdict.self,
             ProofAttempt.self, Step.self, StepRevision.self, Review.self, StepComment.self, Citation.self,
             Statement.self, FidelityReview.self, Evidence.self, LeanResult.self,
-            Alignment.self,
+            Alignment.self, LeanDraft.self, ComputeCell.self,
         ]
     }
 }
@@ -51,3 +51,5 @@ typealias FidelityReview = SangakuSchemaV1.FidelityReview
 typealias Evidence = SangakuSchemaV1.Evidence
 typealias LeanResult = SangakuSchemaV1.LeanResult
 typealias Alignment = SangakuSchemaV1.Alignment
+typealias LeanDraft = SangakuSchemaV1.LeanDraft
+typealias ComputeCell = SangakuSchemaV1.ComputeCell
