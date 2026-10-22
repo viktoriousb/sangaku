@@ -65,7 +65,8 @@ nonisolated struct AttemptReviewState: Hashable, Sendable {
     var steps: [StepReview]
     var progress: ReviewProgress
 
-    init(_ attempt: AttemptFact, people: Set<UUID>) {
+    /// `partial`: the attempt stopped before its end.
+    init(_ attempt: AttemptFact, people: Set<UUID>, partial: Bool = false) {
         let standings = Dictionary(StepStandings.derive(attempt, people: people).map { ($0.id, $0) },
                                    uniquingKeysWith: { first, _ in first })
         attemptID = attempt.id
@@ -76,7 +77,7 @@ nonisolated struct AttemptReviewState: Hashable, Sendable {
                               standing: standing, provenance: StepProvenance(revisions: step.revisions),
                               comments: step.comments, reviews: step.reviews)
         }
-        progress = ReviewProgress(steps.map(\.standing))
+        progress = ReviewProgress(steps.map(\.standing), partial: partial)
     }
 
     subscript(step id: UUID?) -> StepReview? { steps.first { $0.id == id } }

@@ -1080,7 +1080,7 @@ low ones and test gaps; all were fixed.
 ### Next
 
 Milestone 8, Verification and export: `ToolRunner`'s sandbox, the shared Lean workspace, the axiom check and fidelity
-review, the GAP sweep, the citation check, LaTeX, Kerodon and Lean export, and the AI-use statement.
+review, the GAP sweep, the citation check, LaTeX, hashtag and Lean export, and the AI-use statement.
 
 ## 2026-10-20: Milestone 8a, Verification
 
@@ -1244,5 +1244,209 @@ set of low ones and test gaps; all were fixed.
 
 ### Next
 
-Milestone 8b, Export: LaTeX, the Kerodon manuscript, the Lean project and the AI-use statement, with the
+Milestone 8b, Export: LaTeX, the hashtag manuscript, the Lean project and the AI-use statement, with the
 partial-attempt wording.
+
+## 2026-10-22: Milestone 8b, Export
+
+The second pass of Milestone 8: exports, the AI-use statement, and the partial-attempt wording deferred from
+Milestone 5.
+
+### What was built
+
+- **Partial attempts.** `ReviewProgress` knows whether an attempt stopped before its end. Every progress line says
+  so ("3 of 3 steps checked by a person; the attempt stopped before its end"), in Review, the branch panel, the
+  sheets, the exports and the AI-use statement. "All" is said only for a finished attempt. Statuses are unchanged.
+- **Imported results.** A person marks a statement as a result from the literature, with its source, in the
+  statement editor. Its status is `imported`, outside the ladder and never "checked". What uses it is not lowered by
+  it, but every status line, export and the AI-use statement say that it assumes it. An imported statement uses no
+  other statement, so it cannot hide a refuted claim.
+- **The AI-use statement** (`AIUseFacts`, `AIUseStatement`).
+  - Generated from provenance and statuses only, pure and deterministic, every sentence gated by a fact.
+  - Roles only: a person, a language model. Never a name, a slot letter, a model or a maker.
+  - "All" only when every step counts as checked and no attempt stopped early. "Verified in Lean" only for rule 2.
+  - Shown in Review's Export card for the theorem and what it uses; written into every export.
+  - For the example: 4 of the 6 steps checked, step 5 with an open objection, the referee's verdict short of steps 3
+    and 5, only Lem 1 verified in Lean.
+- **The TeX gate** (`TeXGate`, `TeXTables`).
+  - A `TeXFragment` is made only from a literal in the app's source or by the gate, so no text from the store
+    reaches a file ungated; the compiler enforces it.
+  - Prose is printed as typed: every special character is escaped, and commands in text are never run.
+  - Mathematics is allow-listed: commands and environments from the renderer's own tables and the common ones of
+    MicroTeX, and the notation's macros, whose bodies pass the same gate. Everything that reads, writes, redefines
+    or structures is refused by name, and so is TeX's `^^` notation.
+  - Unicode is set as TeX or refused by its code point. Every allowed command, environment and character was
+    compiled with the real pdfLaTeX.
+  - A formula the app shows as its source is refused (invariant 16), and so is one the renderer never checked.
+  - Refusals are collected, each with its place, so a person fixes them in one pass.
+- **The LaTeX export.** One `amsart` file that compiles on its own. It holds:
+  - the theorem and the statements it uses, dependencies first;
+  - the steps of their proofs, with who wrote, revised and checked each (invariant 7);
+  - each statement's status with its reasons, Lean check and computations;
+  - the AI-use statement, the notation's macros, a status table and found citations.
+  
+  When pdfLaTeX is set up, the file is compiled offline in the sandbox first, and the PDF is written beside it.
+- **The hashtag manuscript.**
+  - The kit is pinned into the app: hashtag 1.0, commit `d7c5fba`, as `Resources/Export/HashtagKit.json`, written
+    by `scripts/pin-hashtag-kit.py` from a committed kit. A kit folder chosen in Settings overrides it.
+  - The first export runs the kit's `kit.py new`, from a copy of the kit in the run folder, with the salt
+    `sangaku-<id>`. Every export runs the manuscript's `build.sh` offline in the sandbox. The person's folder is
+    written only when the build passes and every check prints PASS.
+  - The app writes `preface.tex`, `ch1-results.tex`, `appendix-status.tex` and `refs.bib` whole. Its regions of
+    `main.tex` and `preamble.tex` lie between `% sangaku:begin` and `% sangaku:end` lines, and nothing else in those
+    files changes.
+  - Placement:
+    - a statement with steps keeps its kind and its proof as recorded;
+    - one without steps is a conjecture with its evidence;
+    - a refuted one is followed by a counterexample item with the refutation a person accepted;
+    - an imported one has `\imported{…}` in its title and no proof.
+  - Each statement has its own subsection. Labels come from kind and stable ID (`lem:s1a2b3c4d5e6f`), so tags never
+    change. Claims are a `\newitem{claim}{Claim}`.
+  - Found citations whose index returned authors and a title go into `refs.bib` from that data only; the others
+    are printed as written, with their check.
+- **The Lean project.**
+  - A Lake package requiring Mathlib at the pinned release.
+  - The module is exactly what the checks compiled, from checked code only, so its digest equals the results'.
+  - A README gives each statement's Lean standing ("verified" only for rule 2), who wrote the code, the check's
+    date, and the AI-use statement.
+- **Re-export and git.**
+  - A first export goes into an empty folder, or one holding only `.git`.
+  - A later export into the same folder needs the folder to be in a git repository, with every file the app owns
+    committed. A read-only `git status` checks this in the sandbox, reading the repository's root. The app never
+    commits.
+  - The folder is fingerprinted when the export starts and checked again just before writing, so nothing changed
+    meanwhile is replaced.
+  - The tag registry may only grow. A write that fails removes the files it created.
+- **`ExportService`.**
+  - The plan sheet shows every file and region in full, the folder's state and the kit's version. The click
+    carries the plan's digest, and the export plans again at the click.
+  - The kit, build, pdfLaTeX and git jobs take an `ExportApproval` or read only, and write only their run folder.
+  - One export at a time per problem. Stop works at every phase, and deleting a problem stops its export.
+- **Screens.**
+  - Review's Export card: the AI-use statement, Copy Statement, the three exports, the running phase with Stop
+    Export, and the last outcome with its report and Show in Finder.
+  - The plan and report sheets, through one intent handler and sheet host.
+  - File ▸ Export.
+  - Settings in five tabs (Models, Lean, Computations, Limits, Export), so every page fits on the screen; the
+    window reopens on the last tab. Export names the bundled kit, with Choose… to use a kit folder instead and Use
+    Bundled to go back, and pdfLaTeX and git.
+
+### Decisions
+
+Recorded in `docs/DECISIONS.md` (2026-10-21, Milestone 8b). A copy of the existing store opened with the new fields
+without a reset.
+
+**Spec drift to reconcile** (not edited):
+- Imported results: the status `imported`, outside the ladder. They do not cap what uses them, which says it assumes
+  them (invariant 13 and the status section), and they use no statement.
+- New fields: `Statement.importedSource`, `importedByID`, `importedAt`; `Citation.matchedAuthors`, `matchedYear`.
+- `ExportService` is one manager with pure writers, and exports write into folders that carry
+  `.sangaku-export.json`. A later export into a folder needs git.
+- The hashtag kit is bundled with the app rather than only "a setting"; a kit folder in Settings overrides it. It
+  gets a neutral title and `--salt`; the app writes the real title itself. Claims use the label prefix `clm`, which
+  the house list lacks.
+- `ToolID.pdflatex` and `.git`, and the settings for the kit's folder and each problem's export folders.
+
+### Tests
+
+672 tests in 120 suites, all passing. Milestone 8b added 78: 12 after the review, and 4 for the tabbed Settings
+and the bundled kit, among them one that fails when the bundled kit and the kit in the development folder differ:
+- **The gate:**
+  - text escaped, commands in text printed;
+  - Unicode set or refused by name;
+  - mathematics through, with the notation's macros;
+  - every dangerous command, symbol and environment refused by name, `^^` included;
+  - a formula the renderer showed as its source, or never checked, refused;
+  - the formula corpus;
+  - a fuzz test checked by an independent re-reading of the output;
+  - a source scan.
+- **Real TeX:**
+  - every allowed command, environment and character compiles with the export's preamble;
+  - the LaTeX export compiles for both scopes;
+  - the fixture's manuscript passes the kit's `build.sh` with every check PASS.
+- **The AI-use statement:**
+  - the example's exact text;
+  - "all" only for a finished attempt;
+  - imported, referee and computation variants;
+  - roles only;
+  - a 400-case property test that every sentence's fact holds and nothing overclaims.
+- **Composer and writers:**
+  - order and labels;
+  - provenance per step (invariant 7);
+  - citations, links and the bibliography (invariant 6);
+  - imported, open and refuted placement;
+  - "assumes" in every status;
+  - refusals listed by place;
+  - the Lean module's digest and the README's standings.
+- **Service and folders:**
+  - first export, re-export, a repository nested above the folder, uncommitted and untracked files (real git, no
+    commit made), and git not set up;
+  - a failed build and Stop leaving the folder byte for byte as it was;
+  - a folder changed during the build;
+  - a deleted problem keeping no outcome;
+  - a failed write cleaned up;
+  - the jobs' grants and files;
+  - the approval;
+  - the registry;
+  - `build.sh`'s report.
+- **Screens:** wording, the intent handler, smoke renders of the card, the plan sheets and the report, and the
+  scans of who writes what.
+
+### Checked in the running app
+
+- Launched with `-SangakuFixture YES` on Review. The Export card sits under the evidence card with the statement in
+  paragraphs, Copy Statement and the three buttons.
+- The generated LaTeX file and the manuscript were read as PDFs. The first look found the manuscript's title
+  upper-cased with its mathematics (|G| = P²Q), the refutation printed twice, and lost spaces around a typeset scope;
+  all three are fixed.
+- `-SangakuOpenExport <kind>` opens a plan sheet at launch. The debug snapshot cannot draw a sheet's contents, so
+  the sheets were seen only in renders.
+- `-SangakuOpenSettings YES` opens Settings at launch and snapshots it; `-settings.tab <tab>` picks the tab for that
+  launch. The Models, Limits and Export tabs each fit in a window 560 points wide and at most 314 points tall.
+
+Not tried by hand: the plan and report sheets in the running app, Choose… for a folder, Show in Finder, and an
+export against a folder of your own.
+
+### Review
+
+Three reviewers (trust invariants, correctness, conventions) found two high-severity issues, ten medium, and a set
+of low ones and test gaps. All were fixed.
+- **High.**
+  - TeX's `^^` notation (`^^5c` is a backslash) passed the gate, so a formula could spell `\input` or close a
+    status paragraph. The gate now refuses `^^` in and after a formula.
+  - The plan sheet cleared the error of a failed start, such as a missing kit.
+- **Medium.**
+  - A folder inside a repository could never be exported to again: git could not read the repository above it.
+  - An imported statement could use a refuted claim and hide it from what rested on it.
+  - The status tables and the preface did not say what a statement assumes.
+  - Edits made during a build could be overwritten, and a write that failed halfway left a folder no later export
+    accepted.
+  - Stop and deleting a problem were ignored while an export was being planned.
+  - The card read the whole graph again on every render.
+  - Wording and placement rules were written several times over, one of them without noticing a new Lean standing.
+  - LaTeX-only exports put an empty entry into `PATH`.
+  - Saving a statement could leave it marked imported after a refused edit.
+- **Low.**
+  - A page count read from the wrong number; plurals in the report.
+  - A title with a double space inside its mathematics refused; the kit's version not bound to the click.
+  - A person's Lean code drafted first by a model credited to the person alone in the AI-use statement.
+  - An imported result verified in Lean described as unchecked.
+  - Dead code and comments that misdescribed the code.
+  - Two VoiceOver gaps, and an ambiguous Stop.
+- **Privacy.** An earlier spike test committed in a throwaway repository with `-c core.hooksPath=/dev/null`, which
+  the policy forbids. It now reads the status of an uncommitted file instead; no test commits.
+
+### Deferred
+
+- The export sheets, Choose… and Show in Finder, by hand.
+- A tag collision is reported by the build, not pinned for the person.
+- TeX outside `/usr`, `/Library/TeX` or `/opt/homebrew` is not granted, so such an installation fails the build
+  with TeX's own error.
+- `.kit-version` lacks the kit's commit: `kit.py` runs without git.
+- A `.git` file (a worktree or a submodule) whose repository lies outside the folder's root fails the git check
+  closed.
+- The spec drift listed under Decisions, until the spec is reconciled.
+
+### Next
+
+Milestone 9, plain files and collaboration: the plain-file copy, import with merge, Share and draft-section import.

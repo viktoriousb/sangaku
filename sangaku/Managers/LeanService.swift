@@ -299,17 +299,14 @@ final class LeanService {
     /// through what they use. So what a statement says is all in what its fidelity review compares, and its status is
     /// capped by everything its proof relies on (invariant 13).
     private func checkReferences(_ source: LeanSource, of statement: Statement) throws(VerificationError) {
-        let own = LeanNaming.short(statement.stableID)
         let statements = statement.problem?.statements ?? []
         func label(_ short: String) -> String {
             statements.first { LeanNaming.short($0.stableID) == short }?.label ?? "a statement no longer in the problem"
         }
-        if let named = LeanGate.references(in: source.statementPart).subtracting([own]).sorted().first {
-            throw .namesOtherStatement(label: statement.label, named: label(named), inStatementPart: true)
-        }
-        let allowed = Set(statement.usesClosure.map { LeanNaming.short($0.stableID) } + [own])
-        if let named = LeanGate.references(in: source.proofPart).subtracting(allowed).sorted().first {
-            throw .namesOtherStatement(label: statement.label, named: label(named), inStatementPart: false)
+        if let violation = LeanGate.referenceViolation(in: source, own: statement.stableID,
+                                                      uses: statement.usesClosure.map(\.stableID)) {
+            throw .namesOtherStatement(label: statement.label, named: label(violation.named),
+                                       inStatementPart: violation.inStatementPart)
         }
     }
 

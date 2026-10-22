@@ -130,11 +130,10 @@ nonisolated struct CitationLookupClient: Sendable {
         if status == 404, response.status?.internalCode?.contains("No results found") == true { return [] }
         guard status == 200, let result = response.result else { return nil }
         return result.map { document in
-            CitationCandidate(index: "zbMATH Open", title: document.title?.title ?? "",
-                              surnames: (document.contributors?.authors ?? []).map {
-                                  String($0.name.split(separator: ",").first ?? Substring($0.name))
-                              },
-                              year: document.year.flatMap { Int($0) }, url: document.zbmathURL)
+            let names = (document.contributors?.authors ?? []).map(\.name)
+            return CitationCandidate(index: "zbMATH Open", title: document.title?.title ?? "",
+                                     surnames: names.map { String($0.split(separator: ",").first ?? Substring($0)) },
+                                     year: document.year.flatMap { Int($0) }, url: document.zbmathURL, authors: names)
         }
     }
 }
@@ -172,6 +171,7 @@ nonisolated final class AtomReader: NSObject, XMLParserDelegate {
             current?.title = value.replacingOccurrences(of: "\n", with: " ")
         case "name" where inAuthor:
             if let surname = value.split(separator: " ").last { current?.surnames.append(String(surname)) }
+            current?.authors.append(value)
         case "author":
             inAuthor = false
         case "published":

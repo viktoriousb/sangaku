@@ -33,6 +33,12 @@ extension SangakuSchemaV1 {
         var refutationAcceptedByID: UUID?
         var refutationAcceptedAt: Date?
 
+        /// A result from the literature, marked so by a person, with its source ("Authors, Theorem x.y"). It has no
+        /// proof here; what uses it says it assumes it.
+        var importedSource: String?
+        var importedByID: UUID?
+        var importedAt: Date?
+
         init(kind: StatementKind = .claim, label: String = "", statementLaTeX: String = "", author: Author? = nil) {
             self.kindRaw = kind.rawValue
             self.label = label

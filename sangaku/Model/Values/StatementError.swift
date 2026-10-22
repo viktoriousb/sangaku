@@ -14,6 +14,13 @@ nonisolated enum StatementError: Error, Hashable, Sendable {
     case pinnedTheoremCannotBeDeleted
     case pinnedTextIsTheProblemStatement
     case textLockedByLeanCheck
+    case pinnedCannotBeImported
+    case importedHasSteps
+    case invalidImportedSource
+    /// A statement that uses others cannot be marked imported, and an imported one uses none: so it can never hide a
+    /// refuted claim from what rests on it.
+    case importedUsesStatements
+    case importedCannotUse
 
     var message: String {
         switch self {
@@ -39,6 +46,16 @@ nonisolated enum StatementError: Error, Hashable, Sendable {
             "The theorem's text is the problem statement. Edit the problem to change it."
         case .textLockedByLeanCheck:
             "A Lean result or fidelity review was given for this wording, so the text can no longer change. Promote a new statement instead."
+        case .pinnedCannotBeImported:
+            "The problem's theorem is what is being proved here; it cannot be marked as imported."
+        case .importedHasSteps:
+            "This statement rests on steps written here, so it is proved here, not imported."
+        case .invalidImportedSource:
+            "Give the source on one line of at most 200 characters, such as \"Dummit and Foote, Theorem 4.5.18\"."
+        case .importedUsesStatements:
+            "A result from the literature rests on nothing proved here. Remove what this statement uses, then mark it imported."
+        case .importedCannotUse:
+            "An imported result has no proof here, so it uses no other statement."
         }
     }
 }

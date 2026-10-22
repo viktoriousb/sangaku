@@ -56,6 +56,7 @@ final class WindowState {
     var verificationSheet: VerificationSheet?
     /// Why the last verification action was refused, until the next one succeeds or it is dismissed.
     var verificationNotice: String?
+    var exportSheet: ExportSheet?
 
     /// While blind mode is on in Compare, the toolbar's model chips and the proof-structure inspector are hidden:
     /// both name the models (invariant 9). Kept hidden after a verdict reveals one comparison, failing closed, until
@@ -72,6 +73,7 @@ final class WindowState {
         branchSheet = nil
         verificationSheet = nil
         verificationNotice = nil
+        exportSheet = nil
     }
 
     /// Review's and Compare's selections start over: they name attempts of the problem and branch shown.

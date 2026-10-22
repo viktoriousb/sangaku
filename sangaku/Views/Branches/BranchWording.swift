@@ -164,7 +164,6 @@ enum BranchWording {
         case .attempt(let attempt):
             parts.append(([attempt.progress.headline] + attempt.progress.notes).joined(separator: ", "))
             parts.append(referee(attempt))
-            if attempt.isPartial { parts.append("partial") }
             if attempt.isAdopted { parts.append("adopted") }
         case .lemma(let lemma):
             parts.append(lemma.status.words)

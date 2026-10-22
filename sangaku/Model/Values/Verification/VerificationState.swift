@@ -2,7 +2,7 @@ import Foundation
 
 /// Where a statement's Lean check stands, read from the same inputs as rule 2, so a card can never say more than the
 /// statement's status (invariant 3). Only `verified` is rule 2 holding.
-nonisolated enum LeanStanding: Hashable, Sendable {
+nonisolated enum LeanStanding: Hashable, Sendable, CaseIterable {
     case notChecked
     case didNotCompile
     /// Its proof names a statement this one does not use, or its statement part names another statement's code.
@@ -96,6 +96,9 @@ nonisolated struct CitationFact: Hashable, Sendable, Identifiable {
     var detail: String?
     var matchedTitle: String?
     var indexName: String?
+    /// What the index returned for a found citation: authors as listed, and the year.
+    var matchedAuthors: [String] = []
+    var matchedYear: Int?
 }
 
 /// What the verification cards show for a problem: each statement's Lean facts and evidence. Built from the store on
@@ -187,7 +190,8 @@ extension CitationFact {
                                  status: citation.status,
                                  link: CitationRules.link(status: citation.status, url: citation.resolvedURL),
                                  detail: citation.lookupDetail, matchedTitle: citation.matchedTitle,
-                                 indexName: citation.indexName)
+                                 indexName: citation.indexName, matchedAuthors: citation.matchedAuthors,
+                                 matchedYear: citation.matchedYear)
                 }
         }
     }

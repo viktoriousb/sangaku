@@ -11,7 +11,7 @@ is hard to miss.
 Language models and collaborators can take part: drafting attempts, refereeing them, reviewing steps. They are
 optional tools inside the workspace, not its centre.
 
-> **Status: early development.** Seven of nine planned milestones are done, and the verification half of the eighth.
+> **Status: early development.** Eight of nine planned milestones are done.
 > The data format can still change without a migration, so do not keep research you care about in it yet. Today a
 > proof's steps come from a model's attempt; writing and importing your own proofs arrives with a later milestone (see
 > the roadmap).
@@ -155,12 +155,11 @@ Done:
 5. Step-by-step review.
 6. Compare: aligning two attempts step by step, with blind mode.
 7. Branches: approaches as a tree, with dead ends and the reasons they died.
-8. Verification: Lean checks, computations and citation checks, sandboxed.
+8. Verification and export: Lean checks, computations and citation checks, sandboxed; LaTeX, a hashtag manuscript, a
+   Lean project, and an AI-use statement generated from provenance that never claims more checking than was done.
 
 Next:
 
-8. **Export:** LaTeX, a manuscript project, a Lean project, and an AI-use statement generated from provenance that
-   never claims more checking than was done.
 9. **Plain files and collaboration:** a plain-file copy of each problem, merging a collaborator's copy, and importing
    your own LaTeX drafts as proofs.
 
@@ -168,6 +167,8 @@ Next:
 
 - [MicroTeX](https://github.com/NanoMichael/MicroTeX) (MIT), vendored in `Vendor/MicroTeX` with the changes listed in
   `Vendor/MicroTeX/PATCHES.md`.
+- The hashtag kit (MIT), bundled as `sangaku/Resources/Export/HashtagKit.json`, pinned from a commit of the kit by
+  `scripts/pin-hashtag-kit.py`.
 - XITS Math (SIL Open Font License 1.1), converted for MicroTeX, in `sangaku/Resources/Fonts` with its licence.
 - STIX Two Text and STIX Two Math are used from the copies macOS ships; they are not included.
 - Lean, Mathlib, Python, GAP and Sage are not included; the app runs the copies you install or fetch.

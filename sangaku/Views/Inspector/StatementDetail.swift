@@ -115,6 +115,11 @@ struct StatementDetail: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            if let source = node.importedSource {
+                Text(StatementWording.imported(source))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             StatusExplanationLines(explanation: node.explanation)
         }
     }
@@ -139,8 +144,10 @@ struct StatementDetail: View {
                     }
                 }
             }
-            let candidates = state.candidates(toUse: node.id)
-            if !candidates.isEmpty {
+            let candidates = node.importedSource == nil ? state.candidates(toUse: node.id) : []
+            if node.importedSource != nil {
+                Text(StatementError.importedCannotUse.message).font(.caption).foregroundStyle(.secondary)
+            } else if !candidates.isEmpty {
                 Menu("Add Dependency") {
                     ForEach(candidates) { candidate in
                         Button(candidate.label) { add(candidate.id) }

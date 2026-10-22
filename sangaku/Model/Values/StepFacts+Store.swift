@@ -58,6 +58,7 @@ extension StepStandings {
 extension AttemptReviewState {
     /// The attempt as the Review screen shows it, read fresh on every render.
     static func read(attempt: ProofAttempt, people: Set<UUID>) -> AttemptReviewState {
-        AttemptReviewState(attempt.fact, people: people)
+        AttemptReviewState(attempt.fact, people: people,
+                           partial: attempt.message?.outcome(isStreaming: false).isPartial ?? false)
     }
 }

@@ -293,6 +293,17 @@ nonisolated enum LeanGate {
         return found
     }
 
+    /// The first other statement a statement's code may not name, as twelve hex digits: any in its statement part,
+    /// or, in its proof, one outside what it uses directly or through others (`uses`). Nil when it names none.
+    static func referenceViolation(in source: LeanSource, own: UUID,
+                                   uses: [UUID]) -> (named: String, inStatementPart: Bool)? {
+        let ownShort = LeanNaming.short(own)
+        if let named = references(in: source.statementPart).subtracting([ownShort]).sorted().first { return (named, true) }
+        let allowed = Set(uses.map(LeanNaming.short) + [ownShort])
+        if let named = references(in: source.proofPart).subtracting(allowed).sorted().first { return (named, false) }
+        return nil
+    }
+
     /// `S` and twelve lower-case hex digits: `LeanNaming.namespace`'s last part.
     static func isStatementNamespace(_ part: Substring) -> Bool {
         part.count == 13 && part.first == "S" && part.dropFirst().allSatisfy { $0.isHexDigit && !$0.isUppercase }

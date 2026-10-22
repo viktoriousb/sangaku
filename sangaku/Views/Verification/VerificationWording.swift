@@ -13,8 +13,6 @@ enum VerificationWording {
 
     static let citationExplanation = "Only the words below are sent, to export.arxiv.org and api.zbmath.org, one citation at a time. A lookup that cannot decide leaves a citation unchecked, never \"not found\"; \"found\" means a document matching it exists, not that it says what the step needs."
 
-    static let exportPlaceholder = "Exporting LaTeX, a Kerodon manuscript, a Lean project and the AI-use statement comes with the next part of this milestone."
-
     /// "No model is a formalizer…".
     static func noSlot(_ role: SlotRole) -> String {
         let name = role == .formalizer ? "formalizer" : "scout"

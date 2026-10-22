@@ -19,7 +19,7 @@ struct StatusStyleTests {
     func provisionalInk() {
         for status in StatementStatus.allCases {
             let style = StatusStyle.style(for: status)
-            let unchecked = [.proposed, .sketched, .modelChecked].contains(status)
+            let unchecked = [.proposed, .sketched, .modelChecked, .imported].contains(status)
             #expect(style.isProvisional == unchecked, "\(status)")
             if unchecked { #expect(style.ink == .secondaryInk, "\(status)") }
         }

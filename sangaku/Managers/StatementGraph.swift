@@ -86,6 +86,7 @@ final class StatementGraph {
         guard let userStatement = statement(user, in: problem),
               let dependencyStatement = statement(dependency, in: problem) else { throw .noSuchStatement }
         guard !(userStatement.uses ?? []).contains(where: { $0.stableID == dependency }) else { return }
+        guard userStatement.importedSource == nil else { throw .importedCannotUse }
         let state = state(for: problem)
         if let path = state.usesGraph.cyclePath(adding: user, uses: dependency) {
             throw .cycle(labels: path.map(state.label(of:)))
@@ -121,6 +122,38 @@ final class StatementGraph {
         statement.label = label
         if textChanged { statement.statementLaTeX = text }
         changed(problem)
+    }
+
+    /// Marks a statement as a result from the literature, with its source, or clears the mark (`source` nil), as the
+    /// person using the app (invariant 1). An imported statement has no proof here: what uses it is not lowered by it
+    /// and says it assumes it. Refused for the problem's theorem and for a statement resting on steps written here.
+    func setImported(_ id: UUID, source: String?, in problem: Problem) throws(StatementError) {
+        guard let statement = statement(id, in: problem) else { throw .noSuchStatement }
+        guard let source else {
+            guard statement.importedSource != nil else { return }
+            statement.importedSource = nil
+            statement.importedByID = nil
+            statement.importedAt = nil
+            changed(problem)
+            return
+        }
+        guard problem.pinnedStatementID != id else { throw .pinnedCannotBeImported }
+        guard (statement.sourceSteps ?? []).isEmpty else { throw .importedHasSteps }
+        guard (statement.uses ?? []).isEmpty else { throw .importedUsesStatements }
+        let text = try Self.importedSource(source)
+        guard text != statement.importedSource else { return }
+        statement.importedSource = text
+        statement.importedByID = problems.me().stableID
+        statement.importedAt = .now
+        changed(problem)
+    }
+
+    /// A source as stored: one line of at most 200 characters, with nothing hidden in it.
+    nonisolated static func importedSource(_ source: String) throws(StatementError) -> String {
+        let text = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.count <= 200, !text.contains(where: \.isNewline),
+              CodeText.hiddenScalar(in: text) == nil else { throw .invalidImportedSource }
+        return text
     }
 
     /// Deletes a statement. What used it stays, without the edge, so its status may rise: the confirmation names

@@ -3,6 +3,10 @@ import Foundation
 /// The programs the app runs.
 nonisolated enum ToolID: String, CaseIterable, Hashable, Codable, Sendable {
     case python, gap, sage, elan
+    /// TeX for exports: the hashtag manuscript's build and the standalone document's check.
+    case pdflatex
+    /// Read-only `git status` before a manuscript is updated in place.
+    case git
 
     init(_ tool: EvidenceTool) {
         switch tool {
@@ -18,6 +22,8 @@ nonisolated enum ToolID: String, CaseIterable, Hashable, Codable, Sendable {
         case .gap: "GAP"
         case .sage: "Sage"
         case .elan: "elan"
+        case .pdflatex: "pdfLaTeX"
+        case .git: "git"
         }
     }
 }
@@ -32,6 +38,8 @@ nonisolated enum JobKey: Hashable, Sendable {
     case fetch
     /// Asking a tool its version: each probe its own, so two cells starting together never refuse each other's.
     case probe(UUID)
+    /// An export of a problem: the kit, the build, pdfLaTeX or git's read-only status, one at a time.
+    case export(problem: UUID)
 }
 
 /// How long a job may run, how much memory its processes may hold together, how much it may write into its folders,
@@ -49,6 +57,10 @@ nonisolated struct RunLimits: Hashable, Codable, Sendable {
     static let compute = RunLimits(seconds: 120, memoryBytes: 2 << 30, outputBytes: 1 << 20, folderBytes: 1 << 30)
     static let fetch = RunLimits(seconds: 2 * 3600, memoryBytes: 8 << 30, outputBytes: 256 << 10, folderBytes: nil)
     static let probe = RunLimits(seconds: 15, memoryBytes: 512 << 20, outputBytes: 16 << 10, folderBytes: 64 << 20)
+    /// The kit's build: pdfLaTeX up to six times, BibTeX and the kit's checks.
+    static let export = RunLimits(seconds: 300, memoryBytes: 2 << 30, outputBytes: 1 << 20, folderBytes: 512 << 20)
+    /// `kit.py new`, and git's status.
+    static let kit = RunLimits(seconds: 30, memoryBytes: 512 << 20, outputBytes: 64 << 10, folderBytes: 64 << 20)
 }
 
 /// Output as kept: all of it, or its start and its end with what was dropped between counted.

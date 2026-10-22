@@ -8,6 +8,9 @@ nonisolated enum Prose {
         return items.dropLast().joined(separator: ", ") + " and " + (items.last ?? "")
     }
 
+    /// The text with its first letter upper-cased.
+    static func capitalized(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
+
     /// "1 step", "2 steps". For nouns that take an s.
     static func count(_ number: Int, _ noun: String) -> String {
         "\(number) \(noun)\(number == 1 ? "" : "s")"

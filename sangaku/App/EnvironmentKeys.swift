@@ -29,6 +29,8 @@ extension EnvironmentValues {
     @Entry var toolSettings: ToolSettings? = nil
     @Entry var leanService: LeanService? = nil
     @Entry var computeService: ComputeService? = nil
+    @Entry var exportService: ExportService? = nil
+    @Entry var exportActions: ExportActions? = nil
     @Entry var citationService: CitationService? = nil
     /// Overrides the system's accessibility display settings (previews and tests).
     @Entry var statusAccessibilityOverride: StatusAccessibility? = nil

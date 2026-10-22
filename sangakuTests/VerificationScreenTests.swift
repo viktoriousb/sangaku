@@ -397,6 +397,7 @@ struct VerificationLayoutTests {
         try render("verification-settings", width: 560) {
             Form {
                 ToolSettingsSection(settings: fixture.state.toolSettings)
+                LimitsSettingsSection(settings: fixture.state.toolSettings)
                 LeanSettingsSection(lean: fixture.state.lean, settings: fixture.state.toolSettings)
             }
         }
@@ -436,9 +437,21 @@ struct TrustScanTests {
             ("UserDefaults", ["ToolSettings.swift"]),
             // A job for written code is made only from a click on what is stored or planned; `typed` is for tests.
             ("typed(by", ["Approval.swift"]),
-            ("Approval.given(", ["LeanService.swift", "ComputeService.swift"]),
+            ("try Approval.given(", ["LeanService.swift", "ComputeService.swift"]),
             ("Evidence(", ["ComputeService.swift", "PreviewFixtures.swift"]),
             ("withdrawnAt = ", ["ReviewManager.swift", "LeanService.swift"]),
+            // 8b: an export runs only from a click on the plan shown; a person marks a result imported.
+            ("ExportApproval.given(", ["ExportService.swift"]),
+            (".exportKit(", ["ExportService.swift"]),
+            (".exportBuild(", ["ExportService.swift"]),
+            (".exportLatex(", ["ExportService.swift"]),
+            (".exportGitStatus(", ["ExportService.swift"]),
+            ("importedSource = ", ["StatementGraph.swift"]),
+            ("importedByID = ", ["StatementGraph.swift"]),
+            ("matchedAuthors = ", ["CitationService.swift"]),
+            ("TeXFragment(gated:", ["TeXGate.swift"]),
+            // What an export writes is made by its writers, and the manifest and the LaTeX file by the service.
+            ("ExportFile(", ["HashtagWriter.swift", "LeanProjectWriter.swift", "ExportService.swift"]),
         ]
         for (needle, allowed) in rules {
             let files = Set(try lines(matching: needle))

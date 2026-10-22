@@ -18,11 +18,25 @@ private func ids(_ count: Int) -> [UUID] { (0..<count).map { _ in UUID() } }
 
 @Suite("Dependency cap (invariant 13)")
 struct StatusDerivationTests {
-    @Test("Refuted is outside the order; the others rise strictly")
+    @Test("Refuted and imported are outside the order; the others rise strictly")
     func ladder() {
-        #expect(StatementStatus.refuted.trustRank == nil)
+        #expect(StatementStatus.refuted.trustRank == nil && StatementStatus.imported.trustRank == nil)
         #expect(StatementStatus.ladder.map(\.trustRank) == [0, 1, 2, 3, 4])
-        #expect(Set(StatementStatus.ladder + [.refuted]) == Set(StatementStatus.allCases))
+        #expect(Set(StatementStatus.ladder + [.refuted, .imported]) == Set(StatementStatus.allCases))
+    }
+
+    @Test("An imported dependency does not cap: it is assumed, directly or through what is used")
+    func imported() {
+        let (source, lemma, theorem, missing) = (UUID(), UUID(), UUID(), UUID())
+        let derived = StatusDerivation.derive([
+            StatementFacts(id: source, own: .imported, uses: []),
+            StatementFacts(id: lemma, own: .humanChecked, uses: [source]),
+            StatementFacts(id: theorem, own: .humanChecked, uses: [lemma, missing]),
+        ])
+        #expect(derived[source]?.displayed == .imported && derived[source]?.isCapped == false)
+        #expect(derived[lemma]?.displayed == .humanChecked && derived[lemma]?.assumes == [source])
+        #expect(derived[theorem]?.displayed == .proposed, "a missing statement still caps")
+        #expect(derived[theorem]?.assumes == [source], "assumed through the lemma")
     }
 
     @Test("Invariant 13: a statement displays the lower of its own status and its dependency's")
@@ -173,9 +187,13 @@ struct StatusDerivationTests {
             }
             let derived = StatusDerivation.derive(facts.shuffled(using: &generator))
             let byID = Dictionary(uniqueKeysWithValues: facts.map { ($0.id, $0) })
+            // Refuted dependencies let only sketched through; imported ones do not cap at all.
             func reference(_ id: UUID) -> StatementStatus {
-                guard let fact = byID[id], let own = fact.own.trustRank else { return .refuted }
-                let ranks = fact.uses.map { byID[$0]?.own == .refuted ? 1 : (reference($0).trustRank ?? 0) }
+                guard let fact = byID[id] else { return .proposed }
+                guard let own = fact.own.trustRank else { return fact.own }
+                let ranks = fact.uses.compactMap { use -> Int? in
+                    byID[use]?.own == .refuted ? 1 : byID[use]?.own == .imported ? nil : (reference(use).trustRank ?? 0)
+                }
                 return StatementStatus.ladder[([own] + ranks).min() ?? own]
             }
             for fact in facts {
@@ -183,7 +201,7 @@ struct StatusDerivationTests {
                 #expect(displayed == reference(fact.id))
                 guard let rank = displayed?.trustRank else { continue }
                 #expect(rank <= fact.own.trustRank ?? 0)
-                for dependency in fact.uses {
+                for dependency in fact.uses where byID[dependency]?.own != .imported {
                     let ceiling = byID[dependency]?.own == .refuted ? 1 : (derived[dependency]?.displayed.trustRank ?? 0)
                     #expect(rank <= ceiling, "displayed above a dependency")
                 }

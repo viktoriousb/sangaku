@@ -160,6 +160,9 @@ extension SangakuSchemaV1 {
         var checkedByID: UUID?
         var lastQuery: String?
         var matchedTitle: String?
+        /// The matching document's authors and year, as the index returned them: what a bibliography entry may say.
+        var matchedAuthors: [String] = []
+        var matchedYear: Int?
         var lookupDetail: String?
         /// Removed by a person: kept for provenance and hidden everywhere.
         var removedAt: Date?

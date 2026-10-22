@@ -4,12 +4,14 @@ import Foundation
 nonisolated struct StatusExplanation: Hashable, Sendable {
     /// "Capped by Lem 3 (checked by a model)".
     var caps: String?
+    /// "Assumes Lem 2, imported and not checked here".
+    var assumes: String?
     /// "Depends on a refuted claim: Claim", or "… through Lem 6".
     var refutedDependency: String?
     /// The statement is on a cycle of dependencies, or uses one.
     var cycle: String?
 
-    var lines: [String] { [caps, refutedDependency, cycle].compactMap { $0 } }
+    var lines: [String] { [caps, assumes, refutedDependency, cycle].compactMap { $0 } }
 }
 
 /// One statement of a problem as plain values: what it says, what it uses and is used by, the steps it came from,
@@ -44,6 +46,8 @@ nonisolated struct StatementNode: Hashable, Sendable, Identifiable {
     var hasLeanCheck = false
     var hasEvidence = false
     var refutationNote: String?
+    /// Marked by a person as a result from the literature, with this source.
+    var importedSource: String?
     var derived: DerivedStatus
     var explanation = StatusExplanation()
     /// The labels of what it uses and what uses it, for what VoiceOver says.
@@ -79,7 +83,7 @@ nonisolated struct StatementNode: Hashable, Sendable, Identifiable {
         return groups.map { letter($0.author) + "·" + StatementLabels.rangeText($0.indices) }.joined(separator: ", ")
     }
 
-    static func capitalizingFirst(_ text: String) -> String { text.prefix(1).uppercased() + text.dropFirst() }
+    static func capitalizingFirst(_ text: String) -> String { Prose.capitalized(text) }
     static func lowercasingFirst(_ text: String) -> String { text.prefix(1).lowercased() + text.dropFirst() }
 }
 
@@ -101,6 +105,7 @@ nonisolated struct StatementGraphState: Hashable, Sendable {
         var hasLeanCheck = false
         var hasEvidence = false
         var refutationNote: String?
+        var importedSource: String?
     }
 
     /// Ordered by creation, then label, then ID, so every read gives the same order.
@@ -144,7 +149,8 @@ nonisolated struct StatementGraphState: Hashable, Sendable {
                 id: record.id, kind: record.kind, label: record.label, statementLaTeX: record.statementLaTeX,
                 createdAt: record.createdAt, author: record.author, isPinned: record.id == pinnedID,
                 uses: uses[index], usedBy: usedBy[index], sources: record.sources, hasLeanCheck: record.hasLeanCheck,
-                hasEvidence: record.hasEvidence, refutationNote: record.refutationNote, derived: status,
+                hasEvidence: record.hasEvidence, refutationNote: record.refutationNote,
+                importedSource: record.importedSource, derived: status,
                 explanation: Self.explain(status, uses: uses[index], labels: labels, derived: derived),
                 usesLabels: uses[index].compactMap { labels[$0] }, usedByLabels: usedBy[index].compactMap { labels[$0] })
         }
@@ -212,6 +218,10 @@ nonisolated struct StatementGraphState: Hashable, Sendable {
                 return "\(name) (\(cap.dependencyIsRefuted ? StatementStatus.refuted.words : cap.allows.words))"
             })
         }
+        let assumed = status.assumes.compactMap { labels[$0] }
+        if !assumed.isEmpty {
+            explanation.assumes = "Assumes " + Prose.list(assumed) + ", imported and not checked here"
+        }
         if status.dependsOnRefuted {
             let direct = uses.filter { derived[$0]?.own == .refuted }.compactMap { labels[$0] }
             let through = uses.filter { derived[$0]?.own != .refuted && derived[$0]?.dependsOnRefuted == true }
@@ -257,7 +267,7 @@ extension StatementGraphState {
                           own: StatusRules.ownStatus(StatusInputs.make(for: statement, people: people)),
                           uses: (statement.uses ?? []).map(\.stableID), sources: sources,
                           hasLeanCheck: statement.hasLeanCheck, hasEvidence: !(statement.evidence ?? []).isEmpty,
-                          refutationNote: statement.refutationNote)
+                          refutationNote: statement.refutationNote, importedSource: statement.importedSource)
         }
         return StatementGraphState(records: records, pinnedID: problem.pinnedStatementID)
     }

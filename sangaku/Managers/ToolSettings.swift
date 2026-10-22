@@ -10,6 +10,12 @@ final class ToolSettings {
         var paths: [ToolID: String] = [:]
         /// The folder of the shared Lean workspace. No default: a person chooses it.
         var leanWorkspace: String?
+        /// A hashtag kit folder to create manuscripts with instead of the copy bundled with the app; nil uses the
+        /// bundled copy.
+        var hashtagKit: String?
+        /// Where each problem's exports went last, by "<problem>/<kind>". Optional, so settings stored before it
+        /// still decode.
+        var exportFolders: [String: String]?
         var computeSeconds: Double = RunLimits.compute.seconds
         var computeMemoryGiB: Double = Double(RunLimits.compute.memoryBytes) / Double(1 << 30)
         var leanSeconds: Double = RunLimits.lean.seconds
@@ -118,6 +124,10 @@ nonisolated struct ToolLocator: Sendable {
         case .gap: ["/opt/homebrew/bin/gap", "/usr/local/bin/gap"]
         case .sage: ["/opt/homebrew/bin/sage", "/usr/local/bin/sage"]
         case .elan: [home + "/.elan/bin/elan"]
+        case .pdflatex: ["/Library/TeX/texbin/pdflatex", "/opt/homebrew/bin/pdflatex", "/usr/local/bin/pdflatex"]
+        // The selected developer folder's own git: `/usr/bin/git` is a shim that cannot run in the sandbox.
+        case .git: [ProcessExecutor.canonical("/var/db/xcode_select_link") + "/usr/bin/git",
+                    "/Library/Developer/CommandLineTools/usr/bin/git", "/opt/homebrew/bin/git", "/usr/local/bin/git"]
         }
     }
 

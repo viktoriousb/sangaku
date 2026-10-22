@@ -24,6 +24,17 @@ enum DebugSnapshot {
         return WorkspaceView(rawValue: arguments[flag + 1])
     }
 
+    /// `-SangakuOpenExport <latex|hashtag|leanProject>`: new windows open that export's plan sheet.
+    static var exportSheet: ExportKind? {
+        let arguments = CommandLine.arguments
+        guard let flag = arguments.firstIndex(of: "-SangakuOpenExport"), flag + 1 < arguments.count else { return nil }
+        return ExportKind(rawValue: arguments[flag + 1])
+    }
+
+    /// `-SangakuOpenSettings YES`: the first window opens Settings after launch, and the snapshot is of Settings.
+    /// `-settings.tab <tab>` picks its tab for this launch only (the argument domain is never saved).
+    static var opensSettings: Bool { CommandLine.arguments.contains("-SangakuOpenSettings") }
+
     static func scheduleIfRequested() {
         let arguments = CommandLine.arguments
         if let flag = arguments.firstIndex(of: "-SangakuToggleInspector"), flag + 1 < arguments.count {
@@ -59,13 +70,20 @@ enum DebugSnapshot {
         } ?? 3
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             MainActor.assumeIsolated {
-                if let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }),
+                // The Settings window when it was opened, else the first window.
+                let settings = opensSettings
+                    ? NSApp.windows.first { $0.isVisible && ($0.identifier?.rawValue.contains("Settings") ?? false) } : nil
+                if let window = settings ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }),
                    let view = window.contentView {
                     if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                         view.cacheDisplay(in: view.bounds, to: rep)
                         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
                     }
-                    try? layoutReport(window).write(toFile: path + ".layout.txt", atomically: true, encoding: .utf8)
+                    let others = NSApp.windows.filter { $0 !== window }.map {
+                        "other window \($0.identifier?.rawValue ?? "none") visible=\($0.isVisible) \(Int($0.frame.width))x\(Int($0.frame.height))"
+                    }
+                    try? (layoutReport(window) + others.map { $0 + "\n" }.joined())
+                        .write(toFile: path + ".layout.txt", atomically: true, encoding: .utf8)
                 } else {
                     let windows = NSApp.windows.map { "\(type(of: $0)) visible=\($0.isVisible) \(Int($0.frame.width))x\(Int($0.frame.height))" }
                     try? (["no visible window"] + windows).joined(separator: "\n")

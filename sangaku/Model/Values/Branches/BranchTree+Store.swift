@@ -37,7 +37,7 @@ extension BranchTree {
                     author: authors.name(of: message.author), steps: steps.count, isPartial: partial,
                     status: StatusRules.ownStatus(StatusInputs.make(steps: steps, standings: standings)),
                     verdict: standing?.outcome, gapSteps: standing?.outcome == .gap ? standing?.gapStepIndices ?? [] : [],
-                    isAdopted: problem.adoptedAttemptID == attempt.stableID, progress: ReviewProgress(ordered),
+                    isAdopted: problem.adoptedAttemptID == attempt.stableID, progress: ReviewProgress(ordered, partial: partial),
                     warnings: AdoptionWarning.warnings(standings: ordered, partial: partial)))
             }
         }

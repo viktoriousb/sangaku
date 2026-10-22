@@ -135,4 +135,7 @@ nonisolated enum FidelityVerdict: String, StoredEnum {
 /// Derived, never stored from model output (see `StatusRules`).
 nonisolated enum StatementStatus: String, CaseIterable, Codable, Hashable, Sendable {
     case proposed, sketched, modelChecked, humanChecked, formallyVerified, refuted
+    /// A result from the literature, marked so by a person: not proved or checked here. Outside the ladder, like
+    /// refuted; what uses it is not lowered by it but says that it assumes it.
+    case imported
 }

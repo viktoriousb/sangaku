@@ -15,6 +15,17 @@ struct SangakuCommands: Commands {
                 .keyboardShortcut("n", modifiers: [.command, .option])
         }
 
+        CommandGroup(after: .saveItem) {
+            Menu("Export") {
+                ForEach(ExportKind.allCases) { kind in
+                    Button(kind.title + "…") {
+                        if let window { ExportIntentHandler.perform(.open(kind), window: window, export: nil) }
+                    }
+                }
+            }
+            .disabled(window?.selectedProblemID == nil)
+        }
+
         CommandGroup(after: .sidebar) {
             ForEach(WorkspaceView.allCases) { view in
                 Button(view.title) { window?.activeView = view }

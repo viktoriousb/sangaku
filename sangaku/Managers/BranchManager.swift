@@ -144,12 +144,12 @@ final class BranchManager {
         } else {
             nil
         }
+        let partial = message.outcome(isStreaming: running).isPartial
         return AdoptionAssessment(
             attemptID: id, branchID: branch.stableID, branchName: branch.name,
             branchIsMain: problem.mainBranchID == branch.stableID, stepCount: steps.count,
-            warnings: AdoptionWarning.warnings(standings: ordered,
-                                               partial: message.outcome(isStreaming: running).isPartial),
-            progress: ReviewProgress(ordered), refusal: refusal)
+            warnings: AdoptionWarning.warnings(standings: ordered, partial: partial),
+            progress: ReviewProgress(ordered, partial: partial), refusal: refusal)
     }
 
     /// Adopts an attempt as the main line: its steps become the theorem's proof (whose status then derives from

@@ -1,8 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings ▸ Tools: where Python, GAP and Sage are, as found or as chosen, and how long and how much memory a
-/// computation may use. Every run is sandboxed whatever is chosen here.
+/// Settings ▸ Computations: where Python, GAP and Sage are, as found or as chosen. Every run is sandboxed whatever is
+/// chosen here.
 struct ToolSettingsSection: View {
     let settings: ToolSettings
 
@@ -17,25 +17,40 @@ struct ToolSettingsSection: View {
             Text("A computation runs only when you click Run on its code, offline, and can write only to a folder of its own.")
                 .foregroundStyle(.secondary)
         }
-        Section("Limits") {
-            LimitRow(title: "Computation time", value: Binding(get: { settings.values.computeSeconds },
-                                                              set: { value in settings.update { $0.computeSeconds = value } }),
-                     unit: "s", step: 30)
-            LimitRow(title: "Computation memory", value: Binding(get: { settings.values.computeMemoryGiB },
-                                                                set: { value in settings.update { $0.computeMemoryGiB = value } }),
-                     unit: "GiB", step: 0.5)
-            LimitRow(title: "Lean check time", value: Binding(get: { settings.values.leanSeconds },
-                                                             set: { value in settings.update { $0.leanSeconds = value } }),
-                     unit: "s", step: 60)
-            LimitRow(title: "Lean check memory", value: Binding(get: { settings.values.leanMemoryGiB },
-                                                               set: { value in settings.update { $0.leanMemoryGiB = value } }),
-                     unit: "GiB", step: 1)
+    }
+}
+
+/// Settings ▸ Limits: how long and how much memory a computation and a Lean check may use.
+struct LimitsSettingsSection: View {
+    let settings: ToolSettings
+
+    var body: some View {
+        Section("Computations") {
+            LimitRow(title: "Time", value: Binding(get: { settings.values.computeSeconds },
+                                                   set: { value in settings.update { $0.computeSeconds = value } }),
+                     unit: "s", step: 30, spoken: "Computation time")
+            LimitRow(title: "Memory", value: Binding(get: { settings.values.computeMemoryGiB },
+                                                     set: { value in settings.update { $0.computeMemoryGiB = value } }),
+                     unit: "GiB", step: 0.5, spoken: "Computation memory")
+        }
+        Section {
+            LimitRow(title: "Time", value: Binding(get: { settings.values.leanSeconds },
+                                                   set: { value in settings.update { $0.leanSeconds = value } }),
+                     unit: "s", step: 60, spoken: "Lean check time")
+            LimitRow(title: "Memory", value: Binding(get: { settings.values.leanMemoryGiB },
+                                                     set: { value in settings.update { $0.leanMemoryGiB = value } }),
+                     unit: "GiB", step: 1, spoken: "Lean check memory")
+        } header: {
+            Text("Lean checks")
+        } footer: {
+            Text("A run that reaches its time or memory limit is stopped.")
+                .foregroundStyle(.secondary)
         }
     }
 }
 
-/// One tool: where it is and whether it can run, with Choose… and Use Detected.
-private struct ToolPathRow: View {
+/// One tool: where it is and whether it can run, with Choose… and Use Detected. Also used by the export settings.
+struct ToolPathRow: View {
     let tool: ToolID
     let settings: ToolSettings
 
@@ -81,6 +96,8 @@ private struct LimitRow: View {
     @Binding var value: Double
     let unit: String
     let step: Double
+    /// What VoiceOver says: the section's heading is not read with the row.
+    let spoken: String
 
     var body: some View {
         Stepper(value: $value, step: step) {
@@ -92,5 +109,6 @@ private struct LimitRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .accessibilityLabel(spoken)
     }
 }

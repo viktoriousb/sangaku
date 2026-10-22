@@ -126,12 +126,16 @@ final class CitationService {
             citation.status = .found
             citation.indexName = candidate.index
             citation.matchedTitle = candidate.title
+            citation.matchedAuthors = candidate.authors
+            citation.matchedYear = candidate.year
             citation.resolvedURL = CitationRules.link(status: .found, url: candidate.url)?.absoluteString
             citation.lookupDetail = nil
         case .notFound:
             citation.status = .notFound
             citation.indexName = CitationRules.indexes.joined(separator: " and ")
             citation.matchedTitle = nil
+            citation.matchedAuthors = []
+            citation.matchedYear = nil
             citation.resolvedURL = nil
             citation.lookupDetail = nil
         case .unverified(let reason):

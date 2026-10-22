@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Review's side panel: the Lean checks of the statements resting on this attempt, the attempt's citations, the
-/// computations run on those statements, and export (the next part of the milestone). Its words never say more than
+/// computations run on those statements, and export with the AI-use statement. Its words never say more than
 /// the statuses do (invariants 3, 6 and 8).
 struct VerificationPanel: View {
     let problem: Problem
@@ -19,12 +19,7 @@ struct VerificationPanel: View {
             LeanPanelCard(problem: problem, statements: statements, verification: verification, authors: authors)
             CitationsPanelCard(attempt: attempt, facts: citations, currentStepID: currentStepID)
             EvidencePanelCard(statements: statements, verification: verification, authors: authors)
-            PanelCard(title: "Export") {
-                Text(VerificationWording.exportPlaceholder)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            ExportCard(problem: problem, graph: graph ?? .empty, verification: verification)
         }
     }
 }

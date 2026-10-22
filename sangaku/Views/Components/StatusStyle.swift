@@ -56,6 +56,9 @@ nonisolated struct StatusStyle: Hashable, Sendable {
         case .refuted:
             StatusStyle(border: .dashed, borderToken: .refuted, fill: .refutedFill, ink: .refuted,
                         glyph: "✗", label: "Refuted", isProvisional: false, shortLabel: "Refuted")
+        case .imported:
+            StatusStyle(border: .dotted, borderToken: .unchecked, fill: nil, ink: .secondaryInk,
+                        glyph: "↧", label: "Imported, not checked here", isProvisional: true, shortLabel: "Imported")
         }
     }
 

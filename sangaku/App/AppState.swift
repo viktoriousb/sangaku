@@ -19,6 +19,7 @@ final class AppState {
     let lean: LeanService
     let compute: ComputeService
     let citations: CitationService
+    let export: ExportService
 
     private var observers: [NSObjectProtocol] = []
 
@@ -93,10 +94,13 @@ final class AppState {
         let lookups = lookupTransport ?? (isLive ? URLSessionTransport.lookups() : UnavailableTransport())
         citations = CitationService(context: container.mainContext, saves: saves, problems: problems,
                                     client: CitationLookupClient(transport: lookups), announce: VoiceOver.announce)
-        problems.willDelete = { [threads, tools, lean, compute] problemID in
+        export = ExportService(context: container.mainContext, problems: problems, tools: tools,
+                               settings: toolSettings, renderer: renderer, announce: VoiceOver.announce)
+        problems.willDelete = { [threads, tools, lean, compute, export] problemID in
             threads.cancelAll(problemID: problemID)
             lean.stopCheck(problem: problemID)
             compute.cancelAll(problemID: problemID)
+            export.cancelAll(problemID: problemID)
             tools.cancelAll(problemID: problemID)
         }
 
@@ -168,6 +172,7 @@ extension View {
             .environment(\.toolSettings, state.toolSettings)
             .environment(\.leanService, state.lean)
             .environment(\.computeService, state.compute)
+            .environment(\.exportService, state.export)
             .environment(\.citationService, state.citations)
     }
 }

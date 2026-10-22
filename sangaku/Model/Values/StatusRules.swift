@@ -28,6 +28,8 @@ nonisolated struct StatusInputs: Hashable, Sendable {
     }
 
     var refutationAccepted = false
+    /// A person marked it a result from the literature, imported with its source.
+    var imported = false
     var lean: Lean?
     var sourceSteps: [SourceStep] = []
     /// For every attempt holding a source step, the standing (newest) referee verdict is "complete" with no gap at
@@ -53,6 +55,7 @@ nonisolated enum StatusRules {
     static func ownStatus(_ inputs: StatusInputs) -> StatementStatus {
         if inputs.refutationAccepted { return .refuted }
         if leanVerifies(inputs.lean) { return .formallyVerified }
+        if inputs.imported { return .imported }
         if !inputs.sourceSteps.isEmpty,
            inputs.sourceSteps.allSatisfy({ $0.checkedOnCurrentRevision && !$0.hasOpenObjection }) {
             return .humanChecked
@@ -71,6 +74,7 @@ extension StatusInputs {
         func isPerson(_ id: UUID?) -> Bool { id.map(people.contains) ?? false }
 
         inputs.refutationAccepted = isPerson(statement.refutationAcceptedByID)
+        inputs.imported = statement.importedSource != nil && isPerson(statement.importedByID)
 
         if let result = statement.leanResult {
             let current = result.leanStatementSource

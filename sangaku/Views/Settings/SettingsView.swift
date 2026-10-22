@@ -1,14 +1,54 @@
 import SwiftUI
 
-/// sangaku ▸ Settings… (⌘,). API keys go straight to the login keychain; afterwards only their presence is
-/// shown.
+/// The tabs of the Settings window, in order.
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case models, lean, computations, limits, export
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .models: "Models"
+        case .lean: "Lean"
+        case .computations: "Computations"
+        case .limits: "Limits"
+        case .export: "Export"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .models: "key"
+        case .lean: "function"
+        case .computations: "terminal"
+        case .limits: "gauge.with.dots.needle.67percent"
+        case .export: "square.and.arrow.up"
+        }
+    }
+}
+
+/// sangaku ▸ Settings… (⌘,), in five tabs, so each page fits on the screen. API keys go straight to the login
+/// keychain; afterwards only their presence is shown. The window reopens on the tab last shown.
 struct SettingsView: View {
     @Environment(\.credentialManager) private var credentials
     @Environment(\.toolSettings) private var toolSettings
     @Environment(\.leanService) private var lean
+    @AppStorage("settings.tab") private var tab: SettingsTab = .models
 
     var body: some View {
-        Form {
+        TabView(selection: $tab) {
+            ForEach(SettingsTab.allCases) { tab in
+                SettingsPage { page(tab) }
+                    .tabItem { Label(tab.title, systemImage: tab.systemImage) }
+                    .tag(tab)
+            }
+        }
+        .task { await credentials?.refresh(ProviderID.anthropic) }
+    }
+
+    @ViewBuilder private func page(_ tab: SettingsTab) -> some View {
+        switch tab {
+        case .models:
             Section {
                 if let credentials {
                     APIKeyRow(providerID: ProviderID.anthropic, providerName: "Anthropic", credentials: credentials)
@@ -19,15 +59,27 @@ struct SettingsView: View {
                 Text("The key is kept only in your login keychain. sangaku never shows it again and sends it only to Anthropic's API, with each request.")
                     .foregroundStyle(.secondary)
             }
-            if let toolSettings {
-                if let lean { LeanSettingsSection(lean: lean, settings: toolSettings) }
-                ToolSettingsSection(settings: toolSettings)
-            }
+        case .lean:
+            if let lean, let toolSettings { LeanSettingsSection(lean: lean, settings: toolSettings) }
+        case .computations:
+            if let toolSettings { ToolSettingsSection(settings: toolSettings) }
+        case .limits:
+            if let toolSettings { LimitsSettingsSection(settings: toolSettings) }
+        case .export:
+            if let toolSettings { ExportSettingsSection(settings: toolSettings) }
         }
-        .formStyle(.grouped)
-        .frame(width: 560)
-        .fixedSize(horizontal: false, vertical: true)
-        .task { await credentials?.refresh(ProviderID.anthropic) }
+    }
+}
+
+/// One tab's page: a grouped form at the window's width, as tall as its content, so the window fits each tab.
+struct SettingsPage<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        Form { content }
+            .formStyle(.grouped)
+            .frame(width: 560)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

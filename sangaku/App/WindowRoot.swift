@@ -25,6 +25,9 @@ struct WindowRoot: View {
 
     @State private var window = WindowState()
     @Environment(\.problemManager) private var problems
+    #if DEBUG
+    @Environment(\.openSettings) private var openSettings
+    #endif
 
     var body: some View {
         NavigationSplitView {
@@ -48,6 +51,7 @@ struct WindowRoot: View {
         .toolbar { WorkspaceToolbar(window: window) }
         // On the whole split view, so the inspector's actions reach it too.
         .verificationSheets(window: window)
+        .exportSheets(window: window)
         .focusedSceneValue(\.windowState, window)
         // Showing the inspector raises the minimum, and the window widens to make room.
         .frame(minWidth: Self.minimumWidth(inspector: window.inspectorPresented), minHeight: Self.minimumHeight)
@@ -56,6 +60,8 @@ struct WindowRoot: View {
             if window.selectedProblemID == nil { window.select(problem: problems?.mostRecentProblem()) }
             #if DEBUG
             if let view = DebugSnapshot.startView { window.activeView = view }
+            if let kind = DebugSnapshot.exportSheet { window.exportSheet = .plan(kind) }
+            if DebugSnapshot.opensSettings { openSettings() }
             #endif
         }
         #if DEBUG

@@ -9,7 +9,8 @@ nonisolated struct JobFile: Hashable, Sendable {
 /// Everything a run needs, decided before it starts: the program, its arguments (never a shell string: in the person's
 /// shell `gap` may be an alias), its whole environment, its sandbox and grants, its limits and the files it reads.
 /// Made only by the factories below; those that run code a model or a person wrote take an `Approval`, and the file
-/// they write holds the approval's text (invariant 14).
+/// they write holds the approval's text (invariant 14). The export's jobs that compile TeX take an `ExportApproval`,
+/// and write only the files of the plan it holds.
 nonisolated struct SandboxJob: Hashable, Sendable {
     let key: JobKey
     let problemID: UUID?
@@ -107,13 +108,76 @@ nonisolated struct SandboxJob: Hashable, Sendable {
                    limits: .probe, files: [])
     }
 
+    /// `kit.py new` from the copy of the hashtag kit in the run folder, making the project there: the person's kit
+    /// folder is never granted, and the title it gets is the neutral one from the approved plan.
+    static func exportKit(_ approval: ExportApproval, setup: ExportSetup, runFolder: String) -> SandboxJob {
+        let problem = approval.plan.request.problemID
+        return SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: setup.python,
+                          arguments: ["-I", "-B", runFolder + "/kit/kit.py", "new", runFolder + "/project",
+                                      "--title", setup.kitTitle, "--salt", HashtagWriter.salt(problem)],
+                          environment: ToolEnvironment.export(texBin: setup.texBin, python: setup.python, runFolder: runFolder), workingDirectory: runFolder,
+                          grants: SandboxGrants(readable: setup.readable, writable: [runFolder]), limits: .kit, files: [])
+    }
+
+    /// The kit's `build.sh` on the staged project, after writing the approved files and regions into it. The regions
+    /// go into `main.tex` and `preamble.tex` as the kit made them (`first`) or as the earlier export left them.
+    static func exportBuild(_ approval: ExportApproval, setup: ExportSetup, bases: (main: String, preamble: String),
+                            first: Bool, runFolder: String) throws(HashtagPatchError) -> SandboxJob {
+        let problem = approval.plan.request.problemID
+        let project = runFolder + "/project/"
+        var files = approval.plan.files.map { JobFile(path: project + $0.path, contents: $0.contents) }
+        if let regions = approval.plan.regions {
+            let main = first ? try HashtagWriter.firstMain(bases.main, regions: regions)
+                : try HashtagWriter.update(bases.main, file: "manuscript/main.tex",
+                                           regions: [("title", regions.title), ("chapters", regions.chapters)])
+            let preamble = first ? HashtagWriter.firstPreamble(bases.preamble, regions: regions)
+                : try HashtagWriter.update(bases.preamble, file: "manuscript/preamble.tex", regions: [("notation", regions.notation)])
+            files += [JobFile(path: project + "manuscript/main.tex", contents: main),
+                      JobFile(path: project + "manuscript/preamble.tex", contents: preamble)]
+        }
+        return SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: "/bin/sh",
+                          arguments: [project + "build.sh"], environment: ToolEnvironment.export(texBin: setup.texBin, python: setup.python, runFolder: runFolder),
+                          workingDirectory: runFolder, grants: SandboxGrants(readable: setup.readable, writable: [runFolder]),
+                          limits: .export, files: files)
+    }
+
+    /// One pdfLaTeX pass over the approved LaTeX file, to show that it compiles on its own.
+    static func exportLatex(_ approval: ExportApproval, texBin: String, runFolder: String) -> SandboxJob {
+        let problem = approval.plan.request.problemID
+        let file = approval.plan.files.first { $0.path.hasSuffix(".tex") }
+        return SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline,
+                          executable: texBin + "/pdflatex",
+                          arguments: ["-interaction=nonstopmode", "-no-shell-escape", file?.path ?? "main.tex"],
+                          environment: ToolEnvironment.export(texBin: texBin, python: nil, runFolder: runFolder),
+                          workingDirectory: runFolder, grants: SandboxGrants(readable: [], writable: [runFolder]), limits: .export,
+                          files: file.map { [JobFile(path: runFolder + "/" + $0.path, contents: $0.contents)] } ?? [])
+    }
+
+    /// git's status of the export's files in the person's folder, read-only: no lock, no index refresh written. It
+    /// reads the repository the folder is in, which may hold it a few levels down.
+    static func exportGitStatus(problem: UUID, git: String, gitRoot: String?, repository: String, folder: String,
+                                paths: [String], runFolder: String) -> SandboxJob {
+        var environment = ToolEnvironment.base(executable: git, runFolder: runFolder)
+        environment["GIT_CONFIG_NOSYSTEM"] = "1"
+        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
+        environment["GIT_OPTIONAL_LOCKS"] = "0"
+        environment["GIT_TERMINAL_PROMPT"] = "0"
+        if let gitRoot, gitRoot.hasSuffix("/usr") { environment["DEVELOPER_DIR"] = String(gitRoot.dropLast(4)) }
+        return SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: git,
+                          arguments: ["--no-optional-locks", "-C", folder, "status", "--porcelain=v1", "-z",
+                                      "--ignored=matching", "--untracked-files=all", "--"] + paths,
+                          environment: environment, workingDirectory: runFolder,
+                          grants: SandboxGrants(readable: [repository] + (gitRoot.map { [$0] } ?? []), writable: [runFolder]),
+                          limits: .kit, files: [])
+    }
+
     #if DEBUG
     /// For the runner's own tests: any program, in the offline sandbox, with a run folder.
     static func testing(_ executable: String, _ arguments: [String], runFolder: String, readable: [String] = [],
                         limits: RunLimits = .compute, kind: SandboxKind = .offline, key: JobKey = .probe(UUID()),
-                        problem: UUID? = nil) -> SandboxJob {
+                        problem: UUID? = nil, environment: [String: String]? = nil) -> SandboxJob {
         SandboxJob(key: key, problemID: problem, kind: kind, executable: executable, arguments: arguments,
-                   environment: ToolEnvironment.base(executable: executable, runFolder: runFolder),
+                   environment: environment ?? ToolEnvironment.base(executable: executable, runFolder: runFolder),
                    workingDirectory: runFolder, grants: SandboxGrants(readable: readable, writable: [runFolder]),
                    limits: limits, files: [])
     }
@@ -153,7 +217,32 @@ nonisolated struct LeanFetchSetup: Hashable, Sendable {
 }
 
 /// The whole environment of a job: nothing is inherited from the app, so no key, path or setting leaks into a tool.
+/// The tools the manuscript's export runs, found before it starts.
+nonisolated struct ExportSetup: Hashable, Sendable {
+    var python: String
+    var pythonRoot: String?
+    /// The folder `pdflatex` is in; TeX finds the rest of its installation from there.
+    var texBin: String
+    /// The title `kit.py new` gets.
+    var kitTitle: String = "Exported problem"
+
+    var readable: [String] { pythonRoot.map { [$0] } ?? [] }
+}
+
+/// The whole environment of each kind of job: nothing of the app's own environment is passed on.
 nonisolated enum ToolEnvironment {
+    /// TeX writes only into the run folder and runs no shell commands; Python, when there is one, reads no user site.
+    static func export(texBin: String, python: String?, runFolder: String) -> [String: String] {
+        let pythonBin = python.map { ($0 as NSString).deletingLastPathComponent }
+        var environment = ["PATH": ([texBin] + (pythonBin.map { [$0] } ?? []) + ["/usr/bin", "/bin"]).joined(separator: ":"),
+                           "HOME": runFolder, "TMPDIR": runFolder, "LANG": "en_US.UTF-8",
+                           "TEXMFVAR": runFolder + "/texmf-var", "TEXMFCONFIG": runFolder + "/texmf-config",
+                           "TEXMFHOME": runFolder + "/texmf-home", "shell_escape": "f", "openout_any": "p",
+                           "openin_any": "p", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1"]
+        environment["PYTHON"] = python
+        return environment
+    }
+
     static func base(executable: String, runFolder: String) -> [String: String] {
         let directory = (executable as NSString).deletingLastPathComponent
         return ["PATH": [directory, "/usr/bin", "/bin"].joined(separator: ":"), "HOME": runFolder, "TMPDIR": runFolder,

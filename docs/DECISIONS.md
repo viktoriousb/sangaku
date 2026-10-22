@@ -3,9 +3,64 @@
 Settled decisions, newest first. Each records what was decided, when, and why. Open questions stay in the spec's
 *Open decisions* list until they move here.
 
+## 2026-10-21: Milestone 8b architecture and choices
+
+- **Architecture.** The "clean" blueprint, built in the "pragmatic" order: a spike, then the partial wording and the
+  schema, the AI-use statement and the card, the TeX gate and the LaTeX file, the Lean project, the manuscript, and
+  the screens. A snapshot read on the main actor feeds pure composers and writers, and one manager, `ExportService`,
+  runs the jobs and writes the folders. Chosen at the architecture step.
+- **Text is never run.** Every string in an export is a `TeXFragment`, made only from a literal in the app's source
+  or by the gate. Prose is printed exactly as typed; mathematics may use only listed commands and environments and
+  the notation's macros. A formula the app shows as its source refuses the export, and so does one the renderer
+  never checked. TeX's `^^` notation is refused (found in the review). Every listed command and character was
+  compiled with the real pdfLaTeX.
+- **The notation's macros** are written as `\providecommand` then `\renewcommand`, so a name LaTeX or the kit
+  already has (`\N`, `\R`) means what the notation says instead of failing the build; names the document itself
+  uses are refused.
+- **Refusals block the whole export** and are all listed, each with its place.
+- **The AI-use statement** names roles only, never people, models or makers (chosen in the questions). Each
+  sentence rests on a fact. It covers the theorem and what it uses in Review and the LaTeX file, and every statement
+  in the manuscript and the Lean project.
+- **Partial attempts are said everywhere** the progress line is, statuses unchanged (chosen in the questions).
+- **Imported results: disclose, don't cap.** A person marks a result from the literature, with its source. It is
+  `imported`, never "checked"; what uses it keeps its own status and says that it assumes it. An imported
+  statement uses no other statement, so it can never hide a refuted claim. Chosen at the architecture step and in
+  the review; it changes invariant 13.
+- **The manuscript.**
+  - The kit is a copy pinned into the app (`Resources/Export/HashtagKit.json`, written from a committed kit by
+    `scripts/pin-hashtag-kit.py`), and a kit folder chosen in Settings overrides it. Either is checked to be the
+    current kit, never the earlier `htag_manual` one. Changed after the review: the questions had chosen a folder in
+    Settings with no default, but that left a step before the first manuscript with nothing to decide. A test
+    fails when the pin and the kit in the development folder differ, so the copy cannot drift unnoticed; re-pinning
+    takes the kit's new version.
+  - `kit.py new` runs from a copy of the kit in the run folder, with a neutral title and the salt
+    `sangaku-<problem id>`; the app writes the real title itself. `build.sh` runs offline in the sandbox, and the
+    person's folder is written only when it passes with every check.
+  - Labels come from kind and stable ID, so tags never change. Claims are a `\newitem{claim}{Claim}` with the
+    prefix `clm`.
+  - A statement with steps keeps its kind and its proof as recorded, with its status ("checked internally only"
+    where it is). One without steps is a conjecture with its evidence. A refuted one is followed by the refutation a
+    person accepted. An imported one has `\imported{…}` and no proof. All chosen in the questions.
+  - Found citations go into `refs.bib` from the index's data only; the rest are printed with their check.
+    Computations are cited by tool, version, scope, outcome and a digest of the code, never the code. Chosen in the
+    questions.
+  - `main.pdf` is copied into the folder.
+- **Exporting again requires git.** A first export goes into an empty folder, or one holding only `.git`. A later
+  one replaces the app's files only when a read-only `git status`, run in the sandbox, shows them committed. The
+  app never commits and keeps no copies: git holds every earlier version. Chosen in the questions ("can't we use
+  version control"). The tag registry is exempt but may only grow; the PDFs are rebuilt. The folder is checked again
+  just before writing, so nothing changed during a build is replaced (found in the review).
+- **Bound to what was shown.** The plan sheet shows every file and region in full and the kit's version. The click
+  carries the plan's digest and the export plans again at the click (`ExportApproval`, made only from that digest).
+- **The Lean project** is the module exactly as the checks compiled it, from checked code only, with a README;
+  nothing runs.
+- **No commits in tests.** Tests that need a repository run `git init` only, and the one path that needs files
+  committed gets git's answer from a stand-in: the managed policy forbids `-c core.hooksPath`, which an earlier
+  spike test used.
+
 ## 2026-10-20: Milestone 8a architecture and choices
 
-- **Two passes.** Milestone 8 is built as 8a, verification, and 8b, export (LaTeX, Kerodon manuscript, Lean project,
+- **Two passes.** Milestone 8 is built as 8a, verification, and 8b, export (LaTeX, hashtag manuscript, Lean project,
   AI-use statement). Chosen in the milestone's questions.
 - **Signing and entitlements.** No entitlements file: App Sandbox stays off so the app can run the person's own
   `lean`, `gap`, `sage` and `python3`, each inside `sandbox-exec`; signing is unchanged. Hardened runtime and
@@ -662,7 +717,7 @@ All three groups of revisions from the review of the spec against the mockups we
   - Every request writes a `RequestRecord`, which View context displays.
   - The renderer spike tests inline math in wrapping prose.
 - **Features.**
-  - Kerodon-style manuscript export through the hashtag kit.
+  - Manuscript export in the hashtag style, through the hashtag kit.
   - A plain-file copy of each problem.
   - v1 collaboration by sharing and merging that copy, with a `Person` model.
   - LaTeX preamble and draft import.

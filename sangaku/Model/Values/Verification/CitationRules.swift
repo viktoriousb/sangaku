@@ -8,6 +8,8 @@ nonisolated struct CitationCandidate: Hashable, Sendable {
     var surnames: [String]
     var year: Int?
     var url: String?
+    /// The authors' names exactly as the index gives them ("Dummit, David S.", "Ada Example").
+    var authors: [String] = []
 }
 
 /// What one index said: the documents it returned, or why it could not answer.

@@ -4,7 +4,7 @@ nonisolated extension StatementStatus {
     /// The statuses in order of trust, lowest first. `refuted` is outside the order.
     static let ladder: [StatementStatus] = [.proposed, .sketched, .modelChecked, .humanChecked, .formallyVerified]
 
-    /// The position in `ladder`; nil for `refuted`, which no rank describes.
+    /// The position in `ladder`; nil for `refuted` and `imported`, which no rank describes.
     var trustRank: Int? {
         switch self {
         case .proposed: 0
@@ -12,7 +12,7 @@ nonisolated extension StatementStatus {
         case .modelChecked: 2
         case .humanChecked: 3
         case .formallyVerified: 4
-        case .refuted: nil
+        case .refuted, .imported: nil
         }
     }
 
@@ -25,6 +25,7 @@ nonisolated extension StatementStatus {
         case .humanChecked: "checked by a person"
         case .formallyVerified: "verified in Lean"
         case .refuted: "refuted"
+        case .imported: "imported, not checked here"
         }
     }
 }
@@ -56,12 +57,17 @@ nonisolated struct DerivedStatus: Hashable, Sendable {
     var dependsOnRefuted = false
     /// The statement is on a cycle of `uses`, or uses one. Its status cannot be derived, so it counts as proposed.
     var isUnresolved = false
+    /// Imported results it rests on, directly or through what it uses, in graph order. They do not lower its status;
+    /// they are always said.
+    var assumes: [UUID] = []
 
-    var isCapped: Bool { own != .refuted && displayed != own }
+    var isCapped: Bool { own != .refuted && own != .imported && displayed != own }
 }
 
 /// The cap: a statement displays the lowest of its own status and the displayed status of everything it uses. A
-/// refuted dependency lets only `sketched` through and is always reported. A refuted statement stays refuted.
+/// refuted dependency lets only `sketched` through and is always reported. A refuted statement stays refuted. An
+/// imported dependency, a result from the literature, does not lower what uses it: it is recorded in `assumes`, and
+/// every status that rests on it says so.
 nonisolated enum StatusDerivation {
     /// Derives every statement's displayed status. Iterative, so a long chain cannot exhaust the stack; a cycle in
     /// the data (which the graph never creates, but an import might) fails closed instead of looping.
@@ -96,13 +102,22 @@ nonisolated enum StatusDerivation {
         while head < queue.count {
             let index = queue[head]
             head += 1
-            let caps = dependencies[index].map { dependency -> DerivedStatus.Cap in
+            let capping = dependencies[index].filter { nodes[$0].own != .imported }
+            let caps = capping.map { dependency -> DerivedStatus.Cap in
                 let refuted = nodes[dependency].own == .refuted
                 // A resolved dependency is never displayed above its own status, and only refuted ones show refuted.
                 let allows: StatementStatus = refuted ? .sketched : (derived[dependency]?.displayed ?? .proposed)
                 return DerivedStatus.Cap(dependency: nodes[dependency].id, allows: allows, dependencyIsRefuted: refuted)
             } + missing[index].map { DerivedStatus.Cap(dependency: $0, allows: .proposed, dependencyIsMissing: true) }
-            derived[index] = resolve(own: nodes[index].own, caps: caps)
+            var status = resolve(own: nodes[index].own, caps: caps)
+            // What it assumes: the imported results it uses, and what those it uses assume, each once.
+            var assumed = Set<Int>()
+            for dependency in dependencies[index] {
+                if nodes[dependency].own == .imported { assumed.insert(dependency) }
+                for id in derived[dependency]?.assumes ?? [] { if let at = position[id] { assumed.insert(at) } }
+            }
+            status.assumes = assumed.sorted().map { nodes[$0].id }
+            derived[index] = status
             for user in users[index] {
                 remaining[user] -= 1
                 if remaining[user] == 0 { queue.append(user) }
@@ -112,7 +127,7 @@ nonisolated enum StatusDerivation {
         // Whatever was never reached is on a cycle or uses one.
         for index in 0..<count where derived[index] == nil {
             let own = nodes[index].own
-            derived[index] = DerivedStatus(own: own, displayed: own == .refuted ? .refuted : .proposed, isUnresolved: true)
+            derived[index] = DerivedStatus(own: own, displayed: own.trustRank == nil ? own : .proposed, isUnresolved: true)
         }
 
         // Everything that reaches a refuted statement, through any number of steps.
@@ -135,7 +150,7 @@ nonisolated enum StatusDerivation {
     }
 
     private static func resolve(own: StatementStatus, caps: [DerivedStatus.Cap]) -> DerivedStatus {
-        guard let ownRank = own.trustRank else { return DerivedStatus(own: .refuted, displayed: .refuted) }
+        guard let ownRank = own.trustRank else { return DerivedStatus(own: own, displayed: own) }
         let rank = min(ownRank, caps.compactMap(\.allows.trustRank).min() ?? ownRank)
         return DerivedStatus(own: own, displayed: StatementStatus.ladder[rank],
                              caps: rank < ownRank ? caps.filter { $0.allows.trustRank == rank } : [])
