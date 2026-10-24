@@ -3,7 +3,7 @@ import SwiftData
 
 /// How far a running export got.
 nonisolated enum ExportPhase: Hashable, Sendable {
-    case preparing, checkingFolder, creating, building, compiling, writing
+    case preparing, checkingFolder, creating, building, compiling, writing, committing
 
     var words: String {
         switch self {
@@ -13,6 +13,7 @@ nonisolated enum ExportPhase: Hashable, Sendable {
         case .building: "Building with the kit's build.sh"
         case .compiling: "Compiling with pdfLaTeX"
         case .writing: "Writing the folder"
+        case .committing: "Committing the export with git"
         }
     }
 }
@@ -26,6 +27,8 @@ nonisolated struct ExportOutcome: Hashable, Sendable {
     var written: [String] = []
     /// pdfLaTeX was not set up, so the LaTeX file was written without being compiled.
     var notCompiled = false
+    /// The export was written but git could not commit it: why, for the person to commit by hand.
+    var uncommitted: String?
     var at: Date
 
     var succeeded: Bool { error == nil }
@@ -34,7 +37,8 @@ nonisolated struct ExportOutcome: Hashable, Sendable {
 /// Exports: the LaTeX file, the hashtag manuscript and the Lean project, each from the problem's record through the
 /// TeX gate. The only starter of export jobs and the only writer of export folders. An export runs only on a person's
 /// click on the plan shown to them (`ExportApproval`), builds in a run folder of its own, and writes the person's folder
-/// only when everything passed; it replaces files of an earlier export only when git shows them committed.
+/// only when everything passed. It keeps the folder in git: it replaces files of an earlier export only when git shows
+/// them committed, and commits what it wrote, in the person's name.
 @Observable
 final class ExportService {
     private(set) var phases: [UUID: ExportPhase] = [:]
@@ -50,9 +54,14 @@ final class ExportService {
     @ObservationIgnored private var stopRequested: Set<UUID> = []
     @ObservationIgnored private let now: () -> Date
     @ObservationIgnored private let announce: (String) -> Void
+    /// The home folder whose git configuration names the person (`GitIdentity`); nil in a copy of the app that is not
+    /// the person's own (tests, previews, the fixture), which reads no git configuration.
+    @ObservationIgnored private let gitHome: String?
 
     init(context: ModelContext, problems: ProblemManager, tools: ToolRunner, settings: ToolSettings,
-         renderer: MathRenderer, now: @escaping () -> Date = { .now }, announce: @escaping (String) -> Void = { _ in }) {
+         renderer: MathRenderer, gitHome: String?, now: @escaping () -> Date = { .now },
+         announce: @escaping (String) -> Void = { _ in }) {
+        self.gitHome = gitHome
         self.context = context
         self.problems = problems
         self.tools = tools
@@ -144,9 +153,10 @@ final class ExportService {
             }
             if let refusal = plan.folder.refusal { throw ExportError.folder(refusal) }
             let tooling = try tooling(for: request.kind, title: title)
+            let git = try exportGit(folder: request.folder)
             remember(request.folder, for: problem, kind: request.kind)
             tasks[problem] = Task { [weak self] in
-                await self?.run(approval, tooling: tooling)
+                await self?.run(approval, tooling: tooling, git: git)
             }
         } catch {
             phases[problem] = nil
@@ -193,7 +203,33 @@ final class ExportService {
         }
     }
 
-    private func run(_ approval: ExportApproval, tooling: Tooling) async {
+    /// git and the person it commits as, found at the click: an export that could not be committed is refused before
+    /// anything runs.
+    private func exportGit(folder: String) throws(ExportError) -> ExportGit {
+        guard let program = settings.resolution(.git).path else {
+            throw .git("Exports keep their folder in git, and git is not set up. Set it up in Settings ▸ Export.")
+        }
+        let repository = ExportFolder.repositoryRoot(of: folder)
+        if let repository {
+            guard SandboxGrants.isSafe(repository) else {
+                throw .git("The repository's path holds a character the sandbox cannot grant (\" \\ ( or )), so an export cannot commit to it.")
+            }
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: repository + "/.git", isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                throw .git("The folder's repository keeps its data elsewhere (a worktree or a submodule), so an export cannot commit to it.")
+            }
+        }
+        guard let gitHome else {
+            throw .git("This copy of the app (tests, previews or the fixture) reads no git configuration, so it cannot commit an export.")
+        }
+        guard let identity = GitIdentity.read(home: gitHome, repository: repository) else {
+            throw .git("Exports are committed in your name, and your git configuration sets no user.name and user.email. Set them with git config --global, then export again.")
+        }
+        return ExportGit(program: program, root: settings.locator.installationRoot(of: program), identity: identity)
+    }
+
+    private func run(_ approval: ExportApproval, tooling: Tooling, git: ExportGit) async {
         let plan = approval.plan
         let problem = plan.request.problemID
         let runFolder = tools.newRunFolder(problem: problem)
@@ -201,7 +237,7 @@ final class ExportService {
         // What the export may replace, as it stands now: checked again just before writing.
         let before = await ExportFolder.fingerprint(plan.request.folder, paths: ExportFolder.replacedPaths(plan))
         do throws(ExportError) {
-            if plan.folder == .earlierExport { try await checkCommitted(plan, runFolder: runFolder) }
+            if plan.folder == .earlierExport { try await checkCommitted(plan, git: git, runFolder: runFolder) }
             switch tooling {
             case .none:
                 try await install(plan, files: plan.files, staged: [], from: runFolder, before: before, outcome: &outcome)
@@ -211,6 +247,7 @@ final class ExportService {
                 try await exportManuscript(approval, setup: setup, kit: kit, runFolder: runFolder, before: before,
                                            outcome: &outcome)
             }
+            outcome.uncommitted = await commit(plan, written: outcome.written, git: git, runFolder: runFolder)
             announce("\(plan.request.kind.title) exported.")
         } catch {
             outcome.error = error
@@ -227,23 +264,30 @@ final class ExportService {
     }
 
     /// Git must show every file the export replaces committed: then nothing a person changed is lost, and git keeps
-    /// every earlier version.
-    private func checkCommitted(_ plan: ExportPlan, runFolder: String) async throws(ExportError) {
+    /// every earlier version. A folder an earlier export wrote before it was in git is put in git first, as it is.
+    private func checkCommitted(_ plan: ExportPlan, git: ExportGit, runFolder: String) async throws(ExportError) {
         let problem = plan.request.problemID
+        let folder = plan.request.folder
         phases[problem] = .checkingFolder
-        guard let git = settings.resolution(.git).path else {
-            throw .git("Exporting into this folder again needs git, to see that its files are committed. Set up git in Settings.")
-        }
-        guard let root = ExportFolder.repositoryRoot(of: plan.request.folder), SandboxGrants.isSafe(root) else {
-            throw .git("Exporting into this folder again replaces its files, so it must be in a git repository. Run git init there and commit the files, then export again.")
+        guard let root = ExportFolder.repositoryRoot(of: folder) else {
+            // What a first export would have committed: for a manuscript the kit's whole project, build products aside.
+            let present = plan.request.kind == .hashtag
+                ? ExportFolder.installSet(project: folder, plan: plan, first: true)
+                : ExportFolder.replacedPaths(plan).filter { FileManager.default.fileExists(atPath: folder + "/" + $0) }
+            if let problem = await commit(plan, written: present, git: git, runFolder: runFolder,
+                                          message: "Keep the folder as it was before the export") {
+                throw .git(problem)
+            }
+            return
         }
         let paths = ExportFolder.ownedPaths(plan)
-        let report = await tools.run(.exportGitStatus(problem: problem, git: git,
-                                                      gitRoot: settings.locator.installationRoot(of: git),
-                                                      repository: root, folder: plan.request.folder, paths: paths,
-                                                      runFolder: runFolder + "/git"))
+        let report = await tools.run(.exportGitStatus(problem: problem, git: git, repository: root, folder: folder,
+                                                      paths: paths, runFolder: runFolder + "/git"))
         try checkStopped()
-        guard report.end == .exited(0) else {
+        guard case .exited(let code) = report.end else {
+            throw .run(ExportWording.failedRun("git", report.end, output: report.stderr.text))
+        }
+        guard code == 0 else {
             throw .git("git could not read the folder: " + report.stderr.text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         let open = ExportFolder.uncommitted(report.stdout.text)
@@ -268,7 +312,10 @@ final class ExportService {
         let name = ExportService.latexBaseName(plan)
         let log = (try? String(contentsOfFile: runFolder + "/" + name + ".log", encoding: .isoLatin1)) ?? ""
         let errors = log.components(separatedBy: "\n").filter { $0.hasPrefix("! ") }
-        guard report.end == .exited(0), errors.isEmpty else { throw .latex(errors.isEmpty ? ["pdfLaTeX did not finish."] : errors) }
+        guard errors.isEmpty else { throw .latex(errors) }
+        guard report.end == .exited(0) else {
+            throw .run(ExportWording.failedRun("pdfLaTeX", report.end, output: report.stdout.text))
+        }
         let pdf = name + ".pdf"
         let staged = FileManager.default.fileExists(atPath: runFolder + "/" + pdf) ? [pdf] : []
         try await install(plan, files: plan.files, staged: staged, from: runFolder, before: before, outcome: &outcome)
@@ -291,7 +338,7 @@ final class ExportService {
             let made = await tools.run(.exportKit(approval, setup: setup, runFolder: runFolder))
             try checkStopped()
             guard made.end == .exited(0) else {
-                throw .kit("kit.py new failed: " + (made.stderr.text + made.stdout.text).trimmingCharacters(in: .whitespacesAndNewlines))
+                throw .run(ExportWording.failedRun("kit.py new", made.end, output: made.stderr.text + made.stdout.text))
             }
             try? FileManager.default.removeItem(atPath: project + "/" + HashtagWriter.kitExample)
         } else {
@@ -310,6 +357,10 @@ final class ExportService {
         }
         let built = await tools.run(job)
         try checkStopped()
+        // A build that never ran, or was killed, has no report to read.
+        guard case .exited = built.end else {
+            throw .run(ExportWording.failedRun("build.sh", built.end, output: built.stdout.text))
+        }
         let report = BuildReport.read(built.stdout.text, exitedCleanly: built.end == .exited(0))
         outcome.report = report
         guard report.isPass else { throw .build(report) }
@@ -341,6 +392,47 @@ final class ExportService {
             throw .files(reason + " Some of the earlier export's files may already be replaced; git holds them as committed.")
         }
         outcome.written = staged + all.map(\.path)
+    }
+
+    /// Commits exactly `written` (PDFs aside: they are rebuilt from the sources) in the person's name, after `git init`
+    /// when the folder is in no repository. Returns why it could not, for the person to commit by hand.
+    private func commit(_ plan: ExportPlan, written: [String], git: ExportGit, runFolder: String,
+                        message: String? = nil) async -> String? {
+        let problem = plan.request.problemID
+        let folder = plan.request.folder
+        let paths = Array(Set(written.filter { !$0.hasSuffix(".pdf") })).sorted()
+        guard !paths.isEmpty else { return nil }
+        phases[problem] = .committing
+        let jobs = runFolder + "/git"
+        func failed(_ program: String, _ report: RunReport) -> String? {
+            if case .exited(0) = report.end { return nil }
+            return ExportWording.failedRun(program, report.end, output: report.stderr.text + "\n" + report.stdout.text)
+                + " Commit the export's files yourself before exporting again."
+        }
+        var repository = ExportFolder.repositoryRoot(of: folder)
+        if repository == nil {
+            if let problem = failed("git init", await tools.run(.exportGitInit(problem: problem, git: git, folder: folder,
+                                                                                runFolder: jobs))) {
+                // The sandbox made `.git` for git to write into: left empty, it would look like a broken repository.
+                if (try? FileManager.default.contentsOfDirectory(atPath: folder + "/.git"))?.isEmpty == true {
+                    try? FileManager.default.removeItem(atPath: folder + "/.git")
+                }
+                return problem
+            }
+            repository = folder
+        }
+        guard let repository else { return nil }
+        if let problem = failed("git add", await tools.run(.exportGitAdd(problem: problem, git: git, repository: repository,
+                                                                          folder: folder, paths: paths, runFolder: jobs))) {
+            return problem
+        }
+        // Nothing to commit when the export wrote what was already committed.
+        let staged = await tools.run(.exportGitStatus(problem: problem, git: git, repository: repository, folder: folder,
+                                                      paths: paths, runFolder: jobs))
+        if case .exited(0) = staged.end, ExportFolder.uncommitted(staged.stdout.text).isEmpty { return nil }
+        return failed("git commit", await tools.run(.exportGitCommit(
+            problem: problem, git: git, repository: repository, folder: folder, paths: paths,
+            message: message ?? ExportWording.commitMessage(plan.request.kind), runFolder: jobs)))
     }
 
     private func checkStopped() throws(ExportError) {

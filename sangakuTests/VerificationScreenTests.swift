@@ -446,6 +446,9 @@ struct TrustScanTests {
             (".exportBuild(", ["ExportService.swift"]),
             (".exportLatex(", ["ExportService.swift"]),
             (".exportGitStatus(", ["ExportService.swift"]),
+            (".exportGitInit(", ["ExportService.swift"]),
+            (".exportGitAdd(", ["ExportService.swift"]),
+            (".exportGitCommit(", ["ExportService.swift"]),
             ("importedSource = ", ["StatementGraph.swift"]),
             ("importedByID = ", ["StatementGraph.swift"]),
             ("matchedAuthors = ", ["CitationService.swift"]),
@@ -459,6 +462,12 @@ struct TrustScanTests {
         }
         #expect(try lines(matching: "posix_spawn(").contains("ProcessExecutor.swift"), "the scan finds the one spawn")
         #expect(try lines(matching: "typed(by").contains("Approval.swift"), "the scan finds the definition")
+    }
+
+    @Test("What a step establishes is typeset wherever a row shows it, never printed with its dollars")
+    func labelsTypeset() throws {
+        #expect(try lines(matching: #" Text("Establishes: "#).isEmpty, "a plain Text, not MathText")
+        #expect(try lines(matching: #"MathText("Establishes: ""#).sorted() == ["ReviewStepRow.swift", "StepRow.swift"])
     }
 
     @Test("Invariant 16: what a program printed, and code, are never typeset")

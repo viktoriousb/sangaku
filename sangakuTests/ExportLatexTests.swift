@@ -41,6 +41,37 @@ struct ExportComposerTests {
                                                  "q | p + 1", "Resolve q | p + 1", "Order 12 case"])
     }
 
+    @Test("What a step establishes is typeset like its text, never printed with its dollars; a citation too, else printed as written")
+    func oneLineMath() throws {
+        func compose(_ establishes: String, citation: String) throws -> ExportDocument {
+            var snapshot = snapshot
+            let attempt = try #require(snapshot.attempts.firstIndex { $0.id == fixture.attemptA.stableID })
+            snapshot.attempts[attempt].steps[0].establishes = establishes
+            snapshot.attempts[attempt].steps[0].citations[0].text = citation
+            return try ExportComposer.compose(snapshot, scope: .theoremAndUses,
+                                              verdicts: FormulaVerdicts.read(snapshot, renderer: MathRenderer.standard()))
+        }
+        let made = try compose("  $n_p = 1$ or\n $n_p = q$ ", citation: "On $p$-groups, Section 4.5")
+        let step = try #require(made.theorem?.proof.first?.steps.first)
+        #expect(step.establishes.source == "$n_p = 1$ or $n_p = q$")
+        #expect(made.argument.first == step.establishes, "the preface's argument too")
+        #expect(step.citations.first?.source.hasPrefix("On $p$-groups, Section 4.5 (") == true, "\(step.citations.first?.source ?? "")")
+
+        // A citation no one here can edit, whose formula the app cannot set: printed as written, not refused.
+        let printed = try compose("$n_p = 1$", citation: #"On $\notacommand$-groups"#)
+        #expect(printed.theorem?.proof.first?.steps.first?.citations.first?.source
+                    .hasPrefix(#"On \$\textbackslash{}notacommand\$-groups"#) == true)
+
+        // What a step establishes can be revised, so a formula the app cannot set refuses the export, naming the step.
+        do {
+            _ = try compose(#"$\notacommand$"#, citation: "x")
+            Issue.record("expected a refusal")
+        } catch let error as ExportError {
+            guard case .refused(let refusals) = error else { throw error }
+            #expect(refusals.map(\.location).contains(.establishes(1, attempt: nil)))
+        }
+    }
+
     @Test("Invariant 7: each step says who wrote and who checked it, from its history; roles only")
     func provenance() throws {
         let theorem = try #require(try document().theorem)
@@ -201,7 +232,11 @@ struct ExportTeXTests {
     func standalone() async throws {
         let fixture = PreviewFixtures.make()
         for scope in [ExportScope.theoremAndUses, .everyStatement] {
-            let snapshot = ExportSnapshot.read(problem: fixture.problem, people: fixture.state.problems.personIDs())
+            var snapshot = ExportSnapshot.read(problem: fixture.problem, people: fixture.state.problems.personIDs())
+            // Mathematics in what a step establishes and in a citation, typeset where each is printed.
+            let attempt = try #require(snapshot.attempts.firstIndex { $0.id == fixture.attemptA.stableID })
+            snapshot.attempts[attempt].steps[3].establishes = #"$q \mid p + 1$"#
+            snapshot.attempts[attempt].steps[0].citations[0].text = "Dummit and Foote, on $p$-groups"
             let document = try ExportComposer.compose(snapshot, scope: scope,
                                                       verdicts: FormulaVerdicts.read(snapshot, renderer: MathRenderer.standard()))
             let tex = LatexWriter.write(document)
@@ -327,9 +362,14 @@ struct HashtagBuildTests {
         citation.matchedAuthors = ["Dummit, David S.", "Foote, Richard M."]
         citation.matchedYear = 1991
         citation.resolvedURL = "https://zbmath.org/?q=an:0751.00001"
-        let snapshot = ExportSnapshot.read(problem: fixture.problem, people: fixture.state.problems.personIDs())
+        var snapshot = ExportSnapshot.read(problem: fixture.problem, people: fixture.state.problems.personIDs())
+        // Mathematics in what a step establishes and in a citation, typeset where each is printed.
+        let attempt = try #require(snapshot.attempts.firstIndex { $0.id == fixture.attemptA.stableID })
+        snapshot.attempts[attempt].steps[3].establishes = #"$q \mid p + 1$"#
+        snapshot.attempts[attempt].steps[0].citations[0].text = "Dummit and Foote, on $p$-groups"
         let document = try ExportComposer.compose(snapshot, scope: .everyStatement,
                                                   verdicts: FormulaVerdicts.read(snapshot, renderer: MathRenderer.standard()))
+        #expect(document.argument[3].source == #"$q \mid p + 1$"#)
 
         let run = ProcessExecutor.canonical(FileManager.default.temporaryDirectory.path) + "/sangaku-kit-\(UUID().uuidString)"
         defer { try? FileManager.default.removeItem(atPath: run) }

@@ -61,6 +61,8 @@ nonisolated struct RunLimits: Hashable, Codable, Sendable {
     static let export = RunLimits(seconds: 300, memoryBytes: 2 << 30, outputBytes: 1 << 20, folderBytes: 512 << 20)
     /// `kit.py new`, and git's status.
     static let kit = RunLimits(seconds: 30, memoryBytes: 512 << 20, outputBytes: 64 << 10, folderBytes: 64 << 20)
+    /// git writing a repository: its `.git` can be any size, so only time and memory are limited.
+    static let git = RunLimits(seconds: 60, memoryBytes: 1 << 30, outputBytes: 64 << 10, folderBytes: nil)
 }
 
 /// Output as kept: all of it, or its start and its end with what was dropped between counted.

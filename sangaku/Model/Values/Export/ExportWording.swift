@@ -91,6 +91,31 @@ nonisolated enum ExportWording {
         }
     }
 
+    /// Why a program an export runs did not finish its work: it could not start, was stopped or killed at a limit,
+    /// or ended with a status, with the end of what it printed.
+    static func failedRun(_ program: String, _ end: RunEnd, output: String) -> String {
+        let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tail = detail.isEmpty ? "." : ": " + String(detail.suffix(400))
+        return switch end {
+        case .couldNotStart(let reason): program + " could not run: " + reason
+        case .timedOut: program + " did not finish in time."
+        case .memoryLimit: program + " used more memory than allowed."
+        case .diskLimit: program + " wrote more than allowed into its folder."
+        case .stopped: program + " was stopped."
+        case .signaled(let signal): program + " ended on signal \(signal)" + tail
+        case .exited(let code): program + " ended with status \(code)" + tail
+        }
+    }
+
+    /// The message of the commit an export makes in its folder.
+    static func commitMessage(_ kind: ExportKind) -> String {
+        switch kind {
+        case .latex: "Export the LaTeX file"
+        case .hashtag: "Export the hashtag manuscript"
+        case .leanProject: "Export the Lean project"
+        }
+    }
+
     /// A day as `2026-05-09`, in UTC.
     static func day(_ date: Date) -> String {
         date.formatted(Date.ISO8601FormatStyle(timeZone: .gmt).year().month().day())

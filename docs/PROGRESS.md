@@ -1407,6 +1407,10 @@ and the bundled kit, among them one that fails when the bundled kit and the kit 
 Not tried by hand: the plan and report sheets in the running app, Choose… for a folder, Show in Finder, and an
 export against a folder of your own.
 
+Found by hand after the commit: in the example copy, whose tools are turned off, a manuscript export said only
+"kit.py new failed:". Every program an export runs (`kit.py new`, `build.sh`, pdfLaTeX, git) now says why it did not
+do its work, and a build that never ran is no longer reported as a build that failed its checks.
+
 ### Review
 
 Three reviewers (trust invariants, correctness, conventions) found two high-severity issues, ten medium, and a set
@@ -1450,3 +1454,57 @@ of low ones and test gaps. All were fixed.
 ### Next
 
 Milestone 9, plain files and collaboration: the plain-file copy, import with merge, Share and draft-section import.
+
+## 2026-10-23: Exports commit their folder
+
+Found by hand: exporting a manuscript again asked the person to run `git init` and commit the files themselves.
+Exports now keep their folder in git with no step of the person's (decided in `docs/DECISIONS.md`, 2026-10-23).
+
+### What was built
+
+- `GitIdentity` reads `user.name` and `user.email` as text from the person's git configuration files and the
+  repository's own; it never prints them.
+- `ExportGit` carries git, its installation root and the identity. `SandboxJob.exportGitInit`, `exportGitAdd` and
+  `exportGitCommit` write only the run folder and the repository's `.git`; `exportGitStatus` takes an `ExportGit`.
+  `RunLimits.git`: a minute, and no size limit on `.git`.
+- `ExportService` finds git and the identity at the click and refuses there when either is missing. After writing,
+  it runs `git init` when the folder is in no repository, then `git add`, a status check (no commit when nothing
+  changed) and `git commit --only` on the written files, PDFs aside (`ExportPhase.committing`). A failed commit is
+  `ExportOutcome.uncommitted`, said after the outcome. A failed `git init` removes the empty `.git` the sandbox made.
+- An earlier export in no repository is committed as it is before it is replaced: the files the app writes, and
+  for a manuscript the kit's whole project, build products aside, as a first export would have committed it.
+- Wording: the folder lines of the plan sheet, the outcome ("Committed with git." or why not), the Settings ▸
+  Export footer. Every program an export runs says why it failed (`ExportWording.failedRun`).
+- Copies that are not the person's own read no git configuration (`gitHome` nil).
+
+### Tests
+
+- The stand-in that answered for git is gone (`RecordingExecutor` records git's jobs and can stand in for the
+  build). Every test commit is real, in a temporary repository, in the name of `TestGitHome`'s temporary home; no
+  test reads the real configuration.
+- New: commits in the person's name with every file but the PDF; no commit when nothing changed; uncommitted edits
+  refused and kept; a folder inside a repository committed there with the person's staged files left staged; an
+  earlier export outside git committed as it was; a failing repository hook leaving the export written and saying
+  why; refusals with no git or no name; the fixture copy refusing at the click; `GitIdentity`'s parsing and order.
+- The trust scan pins `.exportGitInit(`, `.exportGitAdd(` and `.exportGitCommit(` to `ExportService.swift`.
+
+### Dollar signs in the manuscript
+
+Found by hand in the first export of a problem of the person's own: dollar signs printed in the manuscript. What a
+step establishes went through the gate as plain text, which escapes `$`. It now goes through as one line of prose,
+in each step's heading and in the Preface's "The argument". So do a citation as written and the title an index
+returned, which fall back to printed text when their mathematics cannot be gated. The renderer reads every one of
+these formulas first (`ExportSnapshot.proseTexts`). Tested in the composer and with the real pdfLaTeX and the
+kit's `build.sh`. The rendered manuscript showed the label typeset and no `$` in its text.
+
+The Thread and Review step rows showed the same label as plain text, dollars included. They now show it through
+`MathText` at caption size (`captionMath`), as Compare's notes are; a scan test keeps a plain `Text` from coming
+back. Rendered in light and dark. Menu items (Promote's step picker, Compare's re-pair menu) can show only plain
+text, so they keep the label as written.
+
+### Not done
+
+- `include` and `includeIf` in a git configuration are not followed: a name set only there refuses the export.
+- The Preface's "Use of AI." paragraph has no heading of its own; it runs on from "Provenance and status.".
+- Exporting in the running app with your own data is not tried yet. The Settings ▸ Export tab was snapshotted: the
+  longer footer still fits.

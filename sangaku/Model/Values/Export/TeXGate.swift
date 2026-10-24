@@ -153,8 +153,7 @@ nonisolated enum TeXGate {
     static let maximumLength = 100_000
     static let maximumFormulaTokens = 20_000
 
-    /// One line of plain text (a label, what a step establishes, a citation, a source): printed as typed, with
-    /// runs of whitespace as one space.
+    /// One line of plain text (a label, a source, an author): printed as typed, with runs of whitespace as one space.
     static func plain(_ text: String) throws(TeXRefusal) -> TeXFragment {
         TeXFragment(gated: try escape(oneLine(text)))
     }
@@ -236,6 +235,10 @@ nonisolated enum TeXGate {
     // MARK: Text
 
     /// Each run of whitespace as one space; a space at either end is kept, so pieces join as written.
+    /// A field typeset on one line (the title, what a step establishes, a citation): runs of whitespace as one space,
+    /// none at the ends. Its formulas are read in this form, as they will be gated.
+    static func line(_ text: String) -> String { oneLine(text).trimmingCharacters(in: .whitespaces) }
+
     static func oneLine(_ text: String) -> String {
         var out = ""
         var inSpace = false

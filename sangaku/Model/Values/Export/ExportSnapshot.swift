@@ -201,14 +201,17 @@ nonisolated struct ExportSnapshot: Hashable, Sendable {
 
     /// Every text an export may typeset, so the renderer's verdict on each of its formulas can be read first.
     var proseTexts: [String] {
-        // The title is typeset on one line, so its formulas are read as they will be gated.
-        var texts = [title, TeXGate.oneLine(title).trimmingCharacters(in: .whitespaces)]
+        // One-line fields are typeset on one line, so their formulas are read as they will be gated.
+        var texts = [title, TeXGate.line(title)]
         for statement in statements {
             texts.append(statement.text)
             if let note = statement.refutationNote { texts.append(note) }
             texts += statement.evidence.map(\.scope)
         }
-        texts += attempts.flatMap { $0.steps.map(\.text) }
+        for step in attempts.flatMap(\.steps) {
+            texts += [step.text, TeXGate.line(step.establishes)]
+            texts += step.citations.flatMap { [TeXGate.line($0.text)] + ($0.matchedTitle.map { [TeXGate.line($0)] } ?? []) }
+        }
         texts += notation.flatMap { ["$" + $0.symbol + "$", $0.meaning] }
         return texts
     }

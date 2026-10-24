@@ -95,7 +95,8 @@ final class AppState {
         citations = CitationService(context: container.mainContext, saves: saves, problems: problems,
                                     client: CitationLookupClient(transport: lookups), announce: VoiceOver.announce)
         export = ExportService(context: container.mainContext, problems: problems, tools: tools,
-                               settings: toolSettings, renderer: renderer, announce: VoiceOver.announce)
+                               settings: toolSettings, renderer: renderer, gitHome: isLive ? NSHomeDirectory() : nil,
+                               announce: VoiceOver.announce)
         problems.willDelete = { [threads, tools, lean, compute, export] problemID in
             threads.cancelAll(problemID: problemID)
             lean.stopCheck(problem: problemID)

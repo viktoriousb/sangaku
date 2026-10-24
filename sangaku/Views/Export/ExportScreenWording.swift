@@ -53,9 +53,9 @@ enum ExportScreenWording {
     static func folder(_ state: ExportFolderState) -> String {
         switch state {
         case .empty:
-            "An empty folder: the export creates its files here. To export here again later, the folder must be a git repository with these files committed."
+            "An empty folder: the export creates its files here and commits them with git, in your name, so a later export can replace them safely."
         case .earlierExport:
-            "An earlier export of this problem: its files are replaced, once git shows them committed. Your other files and changes elsewhere are kept."
+            "An earlier export of this problem: its files are replaced and the change is committed with git, in your name. Changes of yours that aren't committed stop the export; your other files are kept."
         case .refused(let reason):
             reason
         }
@@ -73,6 +73,7 @@ enum ExportScreenWording {
         let written = Prose.count(outcome.written.count, "file") + " written to " + outcome.folder + "."
         return outcome.kind.title + " exported: " + written
             + (outcome.notCompiled ? " pdfLaTeX is not set up, so the file was not compiled." : "")
+            + (outcome.uncommitted.map { " It was not committed: " + $0 } ?? " Committed with git.")
     }
 
     static func checks(_ report: BuildReport) -> [String] {

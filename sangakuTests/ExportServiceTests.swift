@@ -3,25 +3,18 @@ import Synchronization
 import Testing
 @testable import sangaku
 
-/// Passes every job to the real executor, except that git's status and the build can be given by the test: no test
-/// makes a commit.
-nonisolated final class GitAnswering: ToolExecuting {
+/// Passes every job to the real executor, recording git's; the build can be given by the test. The export's commits
+/// are real, made in temporary repositories in the name `TestGitHome` gives.
+nonisolated final class RecordingExecutor: ToolExecuting {
     typealias BuildHook = @Sendable (SandboxJob) async -> RunReport?
 
     private let real = ProcessExecutor(runningFolder: nil)
-    /// When set, what git's status prints.
-    let answer = Mutex<String?>(nil)
     let gitJobs = Mutex<[SandboxJob]>([])
     /// Called for `build.sh` before it runs; a report it returns stands for the build.
     let build = Mutex<BuildHook?>(nil)
 
     @concurrent func execute(_ job: SandboxJob, onOutput: (@Sendable (String) -> Void)?) async -> RunReport {
-        if job.executable.hasSuffix("/git") {
-            gitJobs.withLock { $0.append(job) }
-            if let answer = answer.withLock({ $0 }) {
-                return Self.report(.exited(0), answer)
-            }
-        }
+        if job.executable.hasSuffix("/git") { gitJobs.withLock { $0.append(job) } }
         if job.executable == "/bin/sh", let hook = build.withLock({ $0 }), let report = await hook(job) {
             return report
         }
@@ -35,36 +28,55 @@ nonisolated final class GitAnswering: ToolExecuting {
     func killAll() { real.killAll() }
 }
 
+/// A home folder whose git configuration names a test person: exports commit in that name, and no test reads the
+/// real configuration.
+nonisolated enum TestGitHome {
+    static let identity = "Test Person <test@example.invalid>"
+
+    /// With `named` false, a home whose configuration names no one.
+    static func make(named: Bool = true) throws -> String {
+        let home = ProcessExecutor.canonical(FileManager.default.temporaryDirectory.path) + "/sangaku-home-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true)
+        let config = named ? "[user]\n\tname = Test Person\n\temail = test@example.invalid\n" : "[core]\n\tquotepath = false\n"
+        try Data(config.utf8).write(to: URL(fileURLWithPath: home + "/.gitconfig"))
+        return home
+    }
+}
+
 @MainActor
 final class ExportHarness {
     let fixture = PreviewFixtures.make()
-    let executor = GitAnswering()
+    let executor = RecordingExecutor()
     let settings = ToolSettings(storage: .memory())
     let tools: ToolRunner
     let service: ExportService
     let folder: String
     private let work: String
+    /// The home whose git configuration the export reads (`TestGitHome`).
+    let home: String
 
     /// The folder the export writes into; with `nested`, one level inside the folder `root` names.
     let root: String
 
-    init(nested: Bool = false) throws {
+    init(nested: Bool = false, named: Bool = true) throws {
         let temporary = ProcessExecutor.canonical(FileManager.default.temporaryDirectory.path)
         work = temporary + "/sangaku-export-work-\(UUID().uuidString)"
         root = temporary + "/sangaku-export-\(UUID().uuidString)"
         folder = nested ? root + "/paper" : root
+        home = try TestGitHome.make(named: named)
         try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         tools = ToolRunner(executor: executor, workRoot: URL(fileURLWithPath: work))
         // The kit bundled with the app, unless a test chooses a folder.
         settings.update { $0.paths[.python] = KitRun.python }
         service = ExportService(context: fixture.state.container.mainContext, problems: fixture.state.problems,
-                                tools: tools, settings: settings, renderer: fixture.state.renderer)
+                                tools: tools, settings: settings, renderer: fixture.state.renderer, gitHome: home)
         problem = fixture.problem.stableID
     }
 
     deinit {
         try? FileManager.default.removeItem(atPath: root)
         try? FileManager.default.removeItem(atPath: work)
+        try? FileManager.default.removeItem(atPath: home)
     }
 
     /// Kept, so a test can still name the problem after deleting it.
@@ -107,19 +119,40 @@ final class ExportHarness {
 
     /// `git init` only: the root becomes a repository with nothing committed.
     func makeRepository() throws {
+        _ = try git(["init", "-q"], in: root)
+    }
+
+    /// The test's own git, outside the sandbox and with no configuration but the test home's: for setting up a
+    /// repository and reading what the export committed, never for committing.
+    func git(_ arguments: [String], in directory: String? = nil) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", root, "init", "-q"]
-        process.environment = ["GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "HOME": folder]
+        process.arguments = ["-C", directory ?? folder] + arguments
+        process.environment = ["GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "HOME": home]
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
         try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    /// The repository's commits, newest first, as "author <email>|subject"; none when there is no repository.
+    func commits(in directory: String? = nil) throws -> [String] {
+        try git(["log", "--format=%an <%ae>|%s"], in: directory).split(separator: "\n").map(String.init)
+    }
+
+    /// The paths git tracks, relative to the repository's root.
+    func tracked(in directory: String? = nil) throws -> Set<String> {
+        Set(try git(["ls-files", "-z"], in: directory).split(separator: "\u{0}").map(String.init))
     }
 }
 
 @Suite("Export: the service, end to end", .serialized, .enabled(if: KitRun.available && TeXRun.available))
 @MainActor
 struct ExportServiceTests {
-    @Test("A first manuscript export builds and writes the project; again, it needs git, then replaces only the app's files")
+    @Test("A manuscript export builds, writes and commits the project in the person's name; later ones commit what changed with no step of theirs, and refuse their uncommitted edits")
     func manuscript() async throws {
         let harness = try ExportHarness()
         let first = try await harness.export(.hashtag)
@@ -134,31 +167,21 @@ struct ExportServiceTests {
         }
         #expect(harness.read("manuscript/main.tex").contains("% sangaku:begin chapters\n\\input{ch1-results}\n% sangaku:end chapters"))
         let registry = harness.read("manuscript/htag-registry.tex")
-        let preface = harness.read("manuscript/preface.tex")
+        let commit = TestGitHome.identity + "|Export the hashtag manuscript"
 
-        // Not in a repository: refused before anything runs, and nothing changes.
-        let noGit = try await harness.export(.hashtag)
-        guard case .git(let reason) = noGit.error else {
-            Issue.record("expected a git refusal, got \(String(describing: noGit.error))")
-            return
-        }
-        #expect(reason.contains("git repository"))
-        #expect(harness.read("manuscript/preface.tex") == preface)
+        // Put in git and committed in the person's name: every file but the PDF, which is rebuilt from the sources.
+        #expect(first.uncommitted == nil, "\(first.uncommitted ?? "")")
+        #expect(try harness.commits() == [commit])
+        #expect(try harness.tracked().isSuperset(of: ["build.sh", ".gitignore", ".kit-manifest", "manuscript/preface.tex",
+                                                      "manuscript/htag-registry.tex", ExportManifest.fileName]))
+        #expect(try harness.git(["status", "--porcelain"]) == "?? manuscript/main.pdf\n")
 
-        // A repository whose files git shows uncommitted (real git, no commit made): refused, naming them.
-        try harness.makeRepository()
-        let untracked = try await harness.export(.hashtag)
-        guard case .git(let uncommitted) = untracked.error else {
-            Issue.record("expected uncommitted files, got \(String(describing: untracked.error))")
-            return
-        }
-        #expect(uncommitted.contains("manuscript/preface.tex") && uncommitted.contains("Commit or discard"))
-        let job = try #require(harness.executor.gitJobs.withLock { $0.last })
-        #expect(job.grants.writable.allSatisfy { !$0.hasPrefix(harness.folder) }, "the person's folder is never writable")
-        #expect(job.arguments.contains("--no-optional-locks"))
+        // Again with nothing changed: nothing to commit.
+        let same = try await harness.export(.hashtag)
+        #expect(same.succeeded && same.uncommitted == nil, "\(same.error?.message ?? same.uncommitted ?? "")")
+        #expect(try harness.commits() == [commit])
 
-        // Git reports the files committed: a new statement is exported; every earlier tag is kept.
-        harness.executor.answer.withLock { $0 = "" }
+        // A new statement: exported and committed; every earlier tag is kept.
         let lemma = Statement(kind: .lemma, label: "Lem 8", statementLaTeX: "A new lemma about $p$.",
                               author: .human(harness.fixture.you.personID))
         harness.fixture.problem.statements = (harness.fixture.problem.statements ?? []) + [lemma]
@@ -168,15 +191,29 @@ struct ExportServiceTests {
         #expect(ExportFolder.registryGrows(old: registry, new: harness.read("manuscript/htag-registry.tex")))
         #expect(harness.read("manuscript/htag-registry.tex").count > registry.count, "the new item's tag was added")
         #expect(!again.written.contains("build.sh") && !again.written.contains(".kit-manifest"), "frozen files never copied back")
+        #expect(try harness.commits() == [commit, commit])
+        #expect(try harness.git(["status", "--porcelain"]) == "?? manuscript/main.pdf\n")
 
-        // An uncommitted edit to an app file: refused, naming it.
-        harness.executor.answer.withLock { $0 = " M manuscript/preface.tex\u{0}" }
+        // An edit of the person's that is not committed: refused, naming it, and kept as it is.
+        let edit = harness.read("manuscript/preface.tex") + "% mine\n"
+        try Data(edit.utf8).write(to: URL(fileURLWithPath: harness.folder + "/manuscript/preface.tex"))
         let edited = try await harness.export(.hashtag)
         guard case .git(let named) = edited.error else {
             Issue.record("expected an uncommitted edit, got \(String(describing: edited.error))")
             return
         }
-        #expect(named.contains("manuscript/preface.tex"))
+        #expect(named.contains("manuscript/preface.tex") && named.contains("Commit or discard"))
+        #expect(harness.read("manuscript/preface.tex") == edit)
+        #expect(try harness.commits().count == 2)
+
+        // git writes only its run folder and the repository's .git, never the person's files; its status takes no lock.
+        let jobs = harness.executor.gitJobs.withLock { $0 }
+        #expect(jobs.contains { $0.arguments.contains("init") })
+        for job in jobs {
+            #expect(job.grants.writable.allSatisfy { !$0.hasPrefix(harness.folder + "/") || $0 == harness.folder + "/.git" },
+                    "\(job.arguments)")
+        }
+        #expect(jobs.filter { $0.arguments.contains("status") }.allSatisfy { $0.arguments.contains("--no-optional-locks") })
     }
 
     @Test("A kit folder chosen in Settings is used instead of the bundled copy")
@@ -200,11 +237,15 @@ struct ExportServiceTests {
         let name = ExportService.latexName(ExportSnapshot.read(problem: harness.fixture.problem,
                                                                 people: harness.fixture.state.problems.personIDs()))
         #expect(harness.exists(name + ".tex") && harness.exists(name + ".pdf") && harness.exists(ExportManifest.fileName))
+        #expect(try harness.tracked() == [name + ".tex", ExportManifest.fileName], "the PDF is rebuilt from the file")
+        #expect(try harness.commits() == [TestGitHome.identity + "|Export the LaTeX file"])
 
         let other = try ExportHarness()
         let lean = try await other.export(.leanProject)
         #expect(lean.succeeded, "\(lean.error?.message ?? "")")
         #expect(other.exists("lakefile.toml") && other.exists("README.md") && other.exists("lean-toolchain"))
+        #expect(try other.commits() == [TestGitHome.identity + "|Export the Lean project"])
+        #expect(try other.git(["status", "--porcelain"]).isEmpty)
     }
 
     @Test("Nothing runs when the plan changed after it was shown, the folder is someone else's, or the kit is missing")
@@ -248,10 +289,8 @@ struct ExportFolderSafetyTests {
     func failedBuild() async throws {
         let harness = try ExportHarness()
         #expect(try await harness.export(.hashtag).succeeded)
-        try harness.makeRepository()
-        harness.executor.answer.withLock { $0 = "" }
         let before = harness.contents()
-        harness.executor.build.withLock { $0 = { _ in GitAnswering.report(.exited(1), Self.failing) } }
+        harness.executor.build.withLock { $0 = { _ in RecordingExecutor.report(.exited(1), Self.failing) } }
         harness.fixture.lemmas[0].statementLaTeX += " Changed."
         let outcome = try await harness.export(.hashtag)
         guard case .build(let report) = outcome.error else {
@@ -259,7 +298,7 @@ struct ExportFolderSafetyTests {
             return
         }
         #expect(!report.isPass && report.missing.contains("every item has a label"))
-        #expect(harness.contents() == before)
+        #expect(harness.contents() == before, "the files and the repository alike")
     }
 
     @Test("Stop during the build writes nothing; a problem deleted meanwhile keeps no outcome")
@@ -268,7 +307,7 @@ struct ExportFolderSafetyTests {
         harness.executor.build.withLock {
             $0 = { _ in
                 try? await Task.sleep(for: .seconds(30))
-                return GitAnswering.report(.signaled(15), "")
+                return RecordingExecutor.report(.signaled(15), "")
             }
         }
         try await harness.begin(.hashtag)
@@ -306,28 +345,175 @@ struct ExportFolderSafetyTests {
         #expect(Set(harness.contents().keys) == ["notes.txt"])
     }
 
-    @Test("Re-exporting needs git set up; a folder inside a repository is read through its root")
-    func gitSetupAndNesting() async throws {
+    @Test("A program that never ran is named with its reason: the example copy's tools are turned off, and it reads no git configuration")
+    func refusedTools() async throws {
+        let fixture = PreviewFixtures.make()
+        let folder = ProcessExecutor.canonical(FileManager.default.temporaryDirectory.path) + "/sangaku-refused-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        let home = try TestGitHome.make()
+        defer {
+            try? FileManager.default.removeItem(atPath: folder)
+            try? FileManager.default.removeItem(atPath: home)
+        }
+        let problem = fixture.problem.stableID
+        if fixture.state.toolSettings.resolution(.git).path != nil {
+            let request = ExportRequest(problemID: problem, kind: .leanProject, folder: folder)
+            let plan = try await fixture.state.export.plan(request)
+            await #expect(throws: ExportError.git("This copy of the app (tests, previews or the fixture) reads no git configuration, so it cannot commit an export.")) {
+                try await fixture.state.export.start(request, shown: plan.digest)
+            }
+        }
+        // The same copy, given a home to read: the tools it runs are what refuse.
+        let export = ExportService(context: fixture.state.container.mainContext, problems: fixture.state.problems,
+                                   tools: fixture.state.tools, settings: fixture.state.toolSettings,
+                                   renderer: fixture.state.renderer, gitHome: home)
+        for (kind, program) in [(ExportKind.hashtag, "kit.py new"), (.latex, "pdfLaTeX")] {
+            let request = ExportRequest(problemID: problem, kind: kind, folder: folder)
+            let plan = try await export.plan(request)
+            try await export.start(request, shown: plan.digest)
+            try await waitUntil(timeout: .seconds(30)) { !export.isRunning(problem: problem) }
+            let error = try #require(export.outcomes[problem]?.error)
+            #expect(error == .run(program + " could not run: Tools are turned off in this copy of the app."))
+            #expect(error.message.hasSuffix("Nothing was written to the folder."))
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder).isEmpty)
+    }
+
+    @Test("A build that never ran is said as such, not as a build that failed its checks")
+    func buildNeverRan() async throws {
+        let harness = try ExportHarness()
+        harness.executor.build.withLock { $0 = { _ in .couldNotStart("The sandbox refused it.", at: .now) } }
+        let outcome = try await harness.export(.hashtag)
+        #expect(outcome.error == .run("build.sh could not run: The sandbox refused it."))
+        #expect(harness.contents().isEmpty)
+    }
+}
+
+/// Every export keeps its folder in git: real commits, in temporary repositories, in the test home's name.
+@Suite("Export: the folder kept in git", .serialized, .enabled(if: KitRun.available && TeXRun.available))
+@MainActor
+struct ExportGitTests {
+    @Test("An export needs git and the person's name in their git configuration, or nothing runs")
+    func gitAndIdentity() async throws {
+        let harness = try ExportHarness()
+        harness.settings.update { $0.paths[.git] = "/nonexistent/git" }
+        let plan = try await harness.service.plan(harness.request(.leanProject))
+        await #expect(throws: ExportError.git("Exports keep their folder in git, and git is not set up. Set it up in Settings ▸ Export.")) {
+            try await harness.service.start(harness.request(.leanProject), shown: plan.digest)
+        }
+
+        let nameless = try ExportHarness(named: false)
+        let unnamed = try await nameless.service.plan(nameless.request(.leanProject))
+        do {
+            try await nameless.service.start(nameless.request(.leanProject), shown: unnamed.digest)
+            Issue.record("expected a refusal: no one to commit as")
+        } catch {
+            #expect(error.message.contains("sets no user.name and user.email"), "\(error.message)")
+        }
+        #expect(harness.contents().isEmpty && nameless.contents().isEmpty)
+        #expect(!harness.service.isRunning(problem: harness.problem) && !nameless.service.isRunning(problem: nameless.problem))
+    }
+
+    @Test("A folder inside a repository is committed there, and only the export's files: what the person staged stays staged")
+    func nestedRepository() async throws {
+        let nested = try ExportHarness(nested: true)
+        try nested.makeRepository()
+        let first = try await nested.export(.leanProject)
+        #expect(first.succeeded && first.uncommitted == nil, "\(first.error?.message ?? first.uncommitted ?? "")")
+        #expect(!nested.exists(".git"), "no repository inside the repository")
+        #expect(try nested.commits(in: nested.root) == [TestGitHome.identity + "|Export the Lean project"])
+        #expect(try nested.tracked(in: nested.root).allSatisfy { $0.hasPrefix("paper/") })
+        let commit = try #require(nested.executor.gitJobs.withLock { $0 }.last { $0.arguments.contains("commit") })
+        #expect(commit.grants.writable.contains(nested.root + "/.git") && commit.grants.readable.first == nested.root)
+
+        try Data("mine\n".utf8).write(to: URL(fileURLWithPath: nested.root + "/notes.txt"))
+        _ = try nested.git(["add", "notes.txt"], in: nested.root)
+        nested.fixture.problem.title += " again"
+        let again = try await nested.export(.leanProject)
+        #expect(again.succeeded && again.uncommitted == nil, "\(again.error?.message ?? again.uncommitted ?? "")")
+        #expect(try nested.commits(in: nested.root).count == 2)
+        #expect(try nested.git(["show", "--name-only", "--format=", "HEAD"], in: nested.root) == "paper/README.md\n")
+        #expect(try nested.git(["diff", "--cached", "--name-only"], in: nested.root) == "notes.txt\n")
+    }
+
+    @Test("A folder an earlier export wrote before it was in git is committed as it was, the person's edits included, then the export")
+    func earlierExportOutsideGit() async throws {
         let harness = try ExportHarness()
         #expect(try await harness.export(.leanProject).succeeded)
-        try harness.makeRepository()
-        harness.settings.update { $0.paths[.git] = "/nonexistent/git" }
-        guard case .git(let reason) = try await harness.export(.leanProject).error else {
-            Issue.record("expected a git refusal")
-            return
-        }
-        #expect(reason.contains("Set up git in Settings"))
+        try FileManager.default.removeItem(atPath: harness.folder + "/.git")
+        let edited = harness.read("README.md") + "\nMine.\n"
+        try Data(edited.utf8).write(to: URL(fileURLWithPath: harness.folder + "/README.md"))
+        harness.fixture.problem.title += " again"
+        let outcome = try await harness.export(.leanProject)
+        #expect(outcome.succeeded && outcome.uncommitted == nil, "\(outcome.error?.message ?? outcome.uncommitted ?? "")")
+        #expect(try harness.commits() == [TestGitHome.identity + "|Export the Lean project",
+                                          TestGitHome.identity + "|Keep the folder as it was before the export"])
+        #expect(try harness.git(["show", "HEAD~1:README.md"]) == edited, "the person's edit is kept in git")
+        #expect(harness.read("README.md").contains(" again"))
 
-        let nested = try ExportHarness(nested: true)
-        #expect(try await nested.export(.leanProject).succeeded)
-        try nested.makeRepository()
-        guard case .git(let listed) = try await nested.export(.leanProject).error else {
-            Issue.record("expected uncommitted files")
-            return
-        }
-        #expect(listed.contains("Commit or discard") && listed.contains("lakefile.toml"), "git read the repository above: \(listed)")
-        let job = try #require(nested.executor.gitJobs.withLock { $0.last })
-        #expect(job.grants.readable.first == nested.root)
+        // A manuscript: the kit's whole project goes in, as a first export would have put it.
+        let manuscript = try ExportHarness()
+        #expect(try await manuscript.export(.hashtag).succeeded)
+        try FileManager.default.removeItem(atPath: manuscript.folder + "/.git")
+        let again = try await manuscript.export(.hashtag)
+        #expect(again.succeeded && again.uncommitted == nil, "\(again.error?.message ?? again.uncommitted ?? "")")
+        #expect(try manuscript.commits() == [TestGitHome.identity + "|Keep the folder as it was before the export"],
+                "the export changed nothing")
+        #expect(try manuscript.git(["status", "--porcelain"]) == "?? manuscript/main.pdf\n")
+    }
+
+    @Test("A commit that fails leaves the export written and says why, for the person to commit")
+    func commitFails() async throws {
+        let harness = try ExportHarness(nested: true)
+        try harness.makeRepository()
+        let hooks = harness.root + "/.git/hooks"
+        try FileManager.default.createDirectory(atPath: hooks, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho 'refused by the hook' >&2\nexit 1\n".utf8).write(to: URL(fileURLWithPath: hooks + "/pre-commit"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hooks + "/pre-commit")
+        let outcome = try await harness.export(.leanProject)
+        #expect(outcome.succeeded && harness.exists("lakefile.toml"), "\(outcome.error?.message ?? "")")
+        let reason = try #require(outcome.uncommitted)
+        #expect(reason.hasPrefix("git commit ended with status 1") && reason.hasSuffix("Commit the export's files yourself before exporting again."),
+                "\(reason)")
+        #expect(try harness.commits(in: harness.root).isEmpty)
+        #expect(ExportScreenWording.outcome(outcome).contains("It was not committed: git commit ended"))
+    }
+}
+
+@Suite("Export: the person's git identity")
+struct GitIdentityTests {
+    @Test("user.name and user.email from a config file: the [user] section only, quotes and comments as git reads them")
+    func values() {
+        let text = """
+            [core]
+            \tname = Not This
+            [user "work"]
+            \temail = not@this.invalid
+            [user]
+            \tname = "Test  Person" ; a comment
+            \temail = test@example.invalid # another
+            """
+        let values = GitIdentity.userValues(text)
+        #expect(values.name == "Test  Person" && values.email == "test@example.invalid")
+        #expect(GitIdentity.userValues("[core]\n\tname = x\n").name == nil)
+    }
+
+    @Test("Read in git's order, a later file winning; nil without both, or with a hidden character")
+    func read() throws {
+        let home = try TestGitHome.make(named: false)
+        let repository = home + "/repo"
+        defer { try? FileManager.default.removeItem(atPath: home) }
+        try FileManager.default.createDirectory(atPath: home + "/.config/git", withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(atPath: repository + "/.git", withIntermediateDirectories: true)
+        func write(_ text: String, _ path: String) throws { try Data(text.utf8).write(to: URL(fileURLWithPath: path)) }
+        #expect(GitIdentity.read(home: home, repository: nil) == nil)
+        try write("[user]\n\tname = First\n\temail = first@example.invalid\n", home + "/.config/git/config")
+        try write("[user]\n\temail = second@example.invalid\n", home + "/.gitconfig")
+        #expect(GitIdentity.read(home: home, repository: nil) == GitIdentity(name: "First", email: "second@example.invalid"))
+        try write("[user]\n\tname = Third\n", repository + "/.git/config")
+        #expect(GitIdentity.read(home: home, repository: repository) == GitIdentity(name: "Third", email: "second@example.invalid"))
+        try write("[user]\n\tname = Thi\u{202E}rd\n", repository + "/.git/config")
+        #expect(GitIdentity.read(home: home, repository: repository) == nil)
     }
 }
 
@@ -512,6 +698,15 @@ struct ExportPartsTests {
             try await ExportFolder.install(["a.tex", "missing.tex"], from: base + "/source", files: [], into: base + "/folder")
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: base + "/folder").isEmpty)
+    }
+
+    @Test("Why a run failed: its reason, its limit, or its status with the end of what it printed")
+    func failedRun() {
+        #expect(ExportWording.failedRun("git", .couldNotStart("No."), output: "x") == "git could not run: No.")
+        #expect(ExportWording.failedRun("build.sh", .timedOut, output: "") == "build.sh did not finish in time.")
+        #expect(ExportWording.failedRun("pdfLaTeX", .exited(1), output: "  ! Emergency stop.\n") == "pdfLaTeX ended with status 1: ! Emergency stop.")
+        #expect(ExportWording.failedRun("kit.py new", .signaled(9), output: "") == "kit.py new ended on signal 9.")
+        #expect(ExportWording.failedRun("x", .exited(2), output: String(repeating: "a", count: 1000)).count < 450, "only the end")
     }
 
     @Test("Approval: only the plan shown, by digest")

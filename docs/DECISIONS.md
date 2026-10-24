@@ -3,6 +3,36 @@
 Settled decisions, newest first. Each records what was decided, when, and why. Open questions stay in the spec's
 *Open decisions* list until they move here.
 
+## 2026-10-23: Exports commit their folder
+
+- **Every export is committed.** A folder in no repository is put in git (`git init -b main`). Each export then
+  commits the files it wrote, PDFs aside (they are rebuilt from the sources), with `git commit --only`, so nothing
+  else the person staged goes in. An export that changed nothing makes no commit. Uncommitted edits of the person's
+  to the app's files still refuse the export and are never swept into a commit. A folder an earlier export wrote
+  before it was in git is first committed as it is ("Keep the folder as it was before the export"; for a
+  manuscript the kit's whole project, build products aside), so edits made there stay in history before the export
+  replaces them. Chosen by the person ("Init and commit every export"); it
+  reverses "the app never commits" of 2026-10-21.
+- **In the person's name.** `user.name` and `user.email` are read as text from `~/.config/git/config`,
+  `~/.gitconfig` and the repository's `.git/config`, a later file winning, and given to git as the author and
+  committer. Without both, the export is refused before anything runs. `include` and `includeIf` are not followed.
+  Chosen by the person ("Your git identity").
+- **git runs in the sandbox.** It writes only its run folder and the repository's `.git`, and reads neither the
+  system nor the global configuration (`GIT_CONFIG_NOSYSTEM`, `GIT_CONFIG_GLOBAL=/dev/null`, `HOME` the run folder).
+  So hooks set in the global configuration (`core.hooksPath`) do not run on the app's commits; the repository's own
+  `.git/hooks` do. Pre-push hooks still check the commits when the person pushes.
+- **Refused before anything runs:** git not set up; no name or email; a repository whose `.git` is a file (a
+  worktree or a submodule); a repository path the sandbox cannot grant. A commit that fails after the files are
+  written leaves them written; the outcome says the export was not committed, and why.
+- **Step labels and citations are typeset.** What a step establishes was printed as plain text, so its `$…$`
+  showed with its dollars (found by hand in a manuscript). It is now gated like a step's text: its formulas are
+  checked by the renderer first, and one the app cannot set refuses the export, naming the step, since a revision
+  can fix it. A citation as written and a title an index returned are typeset the same way when the gate takes
+  them, and otherwise printed as written: no one here can edit them.
+- **Copies that are not the person's own** (tests, previews, the fixture) read no git configuration and refuse an
+  export at the click. Tests make real commits, only in temporary repositories and in a test name from a temporary
+  home; the stand-in for git's answer is gone.
+
 ## 2026-10-21: Milestone 8b architecture and choices
 
 - **Architecture.** The "clean" blueprint, built in the "pragmatic" order: a spike, then the partial wording and the
@@ -47,7 +77,7 @@ Settled decisions, newest first. Each records what was decided, when, and why. O
   - `main.pdf` is copied into the folder.
 - **Exporting again requires git.** A first export goes into an empty folder, or one holding only `.git`. A later
   one replaces the app's files only when a read-only `git status`, run in the sandbox, shows them committed. The
-  app never commits and keeps no copies: git holds every earlier version. Chosen in the questions ("can't we use
+  app keeps no copies: git holds every earlier version (since 2026-10-23 it also commits each export, above). Chosen in the questions ("can't we use
   version control"). The tag registry is exempt but may only grow; the PDFs are rebuilt. The folder is checked again
   just before writing, so nothing changed during a build is replaced (found in the review).
 - **Bound to what was shown.** The plan sheet shows every file and region in full and the kit's version. The click
@@ -56,7 +86,7 @@ Settled decisions, newest first. Each records what was decided, when, and why. O
   nothing runs.
 - **No commits in tests.** Tests that need a repository run `git init` only, and the one path that needs files
   committed gets git's answer from a stand-in: the managed policy forbids `-c core.hooksPath`, which an earlier
-  spike test used.
+  spike test used. Replaced on 2026-10-23: tests now make real commits in temporary repositories (above).
 
 ## 2026-10-20: Milestone 8a architecture and choices
 

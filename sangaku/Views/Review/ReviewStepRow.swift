@@ -59,8 +59,8 @@ struct ReviewStepRow: View {
                         .foregroundStyle(StepReviewStyle.row(standing).ink.color)
                         .textSelection(.enabled)
                     if !step.establishes.isEmpty {
-                        Text("Establishes: \(step.establishes)")
-                            .font(.caption)
+                        MathText("Establishes: " + step.establishes, showsProblems: false)
+                            .captionMath()
                             .foregroundStyle(.secondary)
                     }
                     ForEach(citations) { CitationLine(fact: $0).font(.caption) }

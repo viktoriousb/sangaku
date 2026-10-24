@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Settings ▸ Export: the hashtag kit manuscripts are created with (the copy bundled with the app, or a kit folder
-/// chosen here), and the tools exports run: pdfLaTeX for building, git for seeing that a folder's files are committed
-/// before an export replaces them.
+/// chosen here), and the tools exports run: pdfLaTeX for building, git for keeping the folder in git and committing
+/// each export.
 struct ExportSettingsSection: View {
     let settings: ToolSettings
 
@@ -44,7 +44,7 @@ struct ExportSettingsSection: View {
         } header: {
             Text("Export")
         } footer: {
-            Text("The manuscript is built with the kit's build.sh and pdfLaTeX, offline in a sandbox that can write only to a folder of its own. git only reads: an export never commits.")
+            Text("The manuscript is built with the kit's build.sh and pdfLaTeX, offline in a sandbox that can write only to a folder of its own. Each export is committed in your git name (user.name and user.email), without your global git settings: hooks set there don't run on these commits.")
                 .foregroundStyle(.secondary)
         }
         .fileImporter(isPresented: $choosing, allowedContentTypes: [.folder]) { result in

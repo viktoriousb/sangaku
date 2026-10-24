@@ -135,6 +135,8 @@ nonisolated enum ExportError: Error, Hashable, Sendable {
     /// pdfLaTeX reported errors on the LaTeX file.
     case latex([String])
     case stopped
+    /// A program the export runs did not do its work (`ExportWording.failedRun`).
+    case run(String)
     case files(String)
 
     var message: String {
@@ -156,6 +158,7 @@ nonisolated enum ExportError: Error, Hashable, Sendable {
         case .latex(let errors):
             "pdfLaTeX reported errors, so nothing was written: " + errors.prefix(3).joined(separator: " ")
         case .stopped: "The export was stopped. Nothing was written to the folder."
+        case .run(let reason): reason + " Nothing was written to the folder."
         case .files(let reason): "Writing the export failed: " + reason
         }
     }

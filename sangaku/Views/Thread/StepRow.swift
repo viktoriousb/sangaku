@@ -28,8 +28,8 @@ struct StepRow: View {
                     .foregroundStyle(StatusStyle.style(for: .proposed).ink.color)
                     .textSelection(.enabled)
                 if !establishes.isEmpty {
-                    Text("Establishes: \(establishes)")
-                        .font(.caption)
+                    MathText("Establishes: " + establishes, showsProblems: false)
+                        .captionMath()
                         .foregroundStyle(.secondary)
                 }
                 if let gapListedBy {
@@ -75,7 +75,7 @@ struct StepRow: View {
 #if DEBUG
 #Preview("Steps", traits: .fixture, .fixedLayout(width: 420, height: 220)) {
     VStack(alignment: .leading, spacing: 10) {
-        StepRow(index: 4, text: #"$q \mid p + 1$ with $q > p$ forces $q = p + 1$."#, establishes: "Resolve q | p + 1",
+        StepRow(index: 4, text: #"$q \mid p + 1$ with $q > p$ forces $q = p + 1$."#, establishes: #"Resolve $q \mid p + 1$"#,
                 confidence: .delicate)
         StepRow(index: 5, text: #"Since $q > p$, $q$ cannot divide $p + 1$."#, establishes: "q ∤ p + 1",
                 confidence: .routine, gapListedBy: "C")

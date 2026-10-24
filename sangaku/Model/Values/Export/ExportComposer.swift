@@ -43,10 +43,10 @@ nonisolated enum ExportComposer {
             }
         }
         let argument = (snapshot.theorem?.sources ?? []).compactMap(snapshot.step).map { step in
-            gate.plain(step.establishes, at: .establishes(step.index, attempt: nil))
+            gate.line(step.establishes, at: .establishes(step.index, attempt: nil))
         }
         // Unbraced: amsart upper-cases a title but not its mathematics, which braces would hide from it.
-        let title = gate.prose(TeXGate.oneLine(snapshot.title).trimmingCharacters(in: .whitespaces), at: .title)
+        let title = gate.line(snapshot.title, at: .title)
 
         guard gate.refusals.isEmpty else { throw .refused(gate.refusals) }
         return ExportDocument(scope: scope, title: title, items: items, aiUse: aiUse, references: references,
@@ -111,7 +111,7 @@ nonisolated enum ExportComposer {
                     steps: part.steps.map { step in
                         ExportDocument.Step(
                             number: step.index,
-                            establishes: gate.plain(step.establishes, at: .establishes(step.index, attempt: number)),
+                            establishes: gate.line(step.establishes, at: .establishes(step.index, attempt: number)),
                             text: gate.prose(step.text, at: .step(step.index, attempt: number)),
                             provenance: gate.plain(ExportWording.provenance(step), at: .step(step.index, attempt: number)),
                             citations: step.citations.map { citation in
@@ -119,7 +119,7 @@ nonisolated enum ExportComposer {
                                 let check = gate.plain("(" + ExportWording.citationCheck(citation) + ")", at: place)
                                 let cited: TeXFragment = Self.citable(citation)
                                     ? "~\\cite{" + TeXGate.citationKey(citation.id) + "}" : .empty
-                                return gate.plain(citation.text, at: place) + " " + check + cited
+                                return gate.cited(citation.text, at: place) + " " + check + cited
                             })
                     })
             }
@@ -161,7 +161,7 @@ nonisolated enum ExportComposer {
         return ExportDocument.Reference(
             key: TeXGate.citationKey(citation.id),
             authors: citation.matchedAuthors.map { gate.plain($0, at: place) },
-            title: gate.plain(title, at: place), year: citation.matchedYear,
+            title: gate.cited(title, at: place), year: citation.matchedYear,
             link: citation.link.flatMap(TeXGate.url),
             index: gate.plain(citation.indexName ?? "an index", at: place))
     }
@@ -188,6 +188,18 @@ nonisolated enum ExportComposer {
         mutating func prose(_ text: String, at location: TeXLocation) -> TeXFragment {
             let (macros, verdicts) = (self.macros, self.verdicts)
             return run(at: location) { () throws(TeXRefusal) in try TeXGate.prose(text, macros: macros, verdicts: verdicts) }
+        }
+
+        /// One line of prose with mathematics: the title, what a step establishes.
+        mutating func line(_ text: String, at location: TeXLocation) -> TeXFragment {
+            prose(TeXGate.line(text), at: location)
+        }
+
+        /// A line no one here can edit (a citation as a model wrote it, a title an index returned): its mathematics
+        /// typeset when the gate takes it, else the line printed as written.
+        mutating func cited(_ text: String, at location: TeXLocation) -> TeXFragment {
+            if let typeset = try? TeXGate.prose(TeXGate.line(text), macros: macros, verdicts: verdicts) { return typeset }
+            return plain(text, at: location)
         }
 
         mutating func pieces(_ pieces: [ExportPiece], at location: TeXLocation) -> TeXFragment {

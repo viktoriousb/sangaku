@@ -155,20 +155,50 @@ nonisolated struct SandboxJob: Hashable, Sendable {
 
     /// git's status of the export's files in the person's folder, read-only: no lock, no index refresh written. It
     /// reads the repository the folder is in, which may hold it a few levels down.
-    static func exportGitStatus(problem: UUID, git: String, gitRoot: String?, repository: String, folder: String,
-                                paths: [String], runFolder: String) -> SandboxJob {
-        var environment = ToolEnvironment.base(executable: git, runFolder: runFolder)
-        environment["GIT_CONFIG_NOSYSTEM"] = "1"
-        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
-        environment["GIT_OPTIONAL_LOCKS"] = "0"
-        environment["GIT_TERMINAL_PROMPT"] = "0"
-        if let gitRoot, gitRoot.hasSuffix("/usr") { environment["DEVELOPER_DIR"] = String(gitRoot.dropLast(4)) }
-        return SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: git,
-                          arguments: ["--no-optional-locks", "-C", folder, "status", "--porcelain=v1", "-z",
-                                      "--ignored=matching", "--untracked-files=all", "--"] + paths,
+    static func exportGitStatus(problem: UUID, git: ExportGit, repository: String, folder: String, paths: [String],
+                                runFolder: String) -> SandboxJob {
+        SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: git.program,
+                   arguments: ["--no-optional-locks", "-C", folder, "status", "--porcelain=v1", "-z",
+                               "--ignored=matching", "--untracked-files=all", "--"] + paths,
+                   environment: ToolEnvironment.git(git, runFolder: runFolder), workingDirectory: runFolder,
+                   grants: SandboxGrants(readable: [repository] + git.readable, writable: [runFolder]),
+                   limits: .kit, files: [])
+    }
+
+    /// `git init` in an export's folder that is in no repository yet: it writes only the folder's new `.git`.
+    static func exportGitInit(problem: UUID, git: ExportGit, folder: String, runFolder: String) -> SandboxJob {
+        SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: git.program,
+                   arguments: ["-C", folder, "init", "-q", "-b", "main"],
+                   environment: ToolEnvironment.git(git, runFolder: runFolder), workingDirectory: runFolder,
+                   grants: SandboxGrants(readable: [folder] + git.readable, writable: [runFolder, folder + "/.git"]),
+                   limits: .git, files: [])
+    }
+
+    /// `git add` of exactly the files an export wrote, writing only the repository's `.git`.
+    static func exportGitAdd(problem: UUID, git: ExportGit, repository: String, folder: String, paths: [String],
+                             runFolder: String) -> SandboxJob {
+        SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: git.program,
+                   arguments: ["-C", folder, "add", "--"] + paths,
+                   environment: ToolEnvironment.git(git, runFolder: runFolder), workingDirectory: runFolder,
+                   grants: SandboxGrants(readable: [repository] + git.readable, writable: [runFolder, repository + "/.git"]),
+                   limits: .git, files: [])
+    }
+
+    /// `git commit --only` of exactly the files an export wrote, as the person (`ExportGit.identity`): anything else
+    /// the person had staged stays staged and out of the commit.
+    static func exportGitCommit(problem: UUID, git: ExportGit, repository: String, folder: String, paths: [String],
+                                message: String, runFolder: String) -> SandboxJob {
+        var environment = ToolEnvironment.git(git, runFolder: runFolder)
+        for role in ["AUTHOR", "COMMITTER"] {
+            environment["GIT_\(role)_NAME"] = git.identity.name
+            environment["GIT_\(role)_EMAIL"] = git.identity.email
+        }
+        return SandboxJob(key: .export(problem: problem), problemID: problem, kind: .offline, executable: git.program,
+                          arguments: ["-C", folder, "commit", "-q", "-m", message, "--only", "--"] + paths,
                           environment: environment, workingDirectory: runFolder,
-                          grants: SandboxGrants(readable: [repository] + (gitRoot.map { [$0] } ?? []), writable: [runFolder]),
-                          limits: .kit, files: [])
+                          grants: SandboxGrants(readable: [repository] + git.readable,
+                                                writable: [runFolder, repository + "/.git"]),
+                          limits: .git, files: [])
     }
 
     #if DEBUG
@@ -229,8 +259,29 @@ nonisolated struct ExportSetup: Hashable, Sendable {
     var readable: [String] { pythonRoot.map { [$0] } ?? [] }
 }
 
+/// git as an export runs it: the program, its installation (readable), and the person whose commits it makes.
+nonisolated struct ExportGit: Hashable, Sendable {
+    var program: String
+    var root: String?
+    var identity: GitIdentity
+
+    var readable: [String] { root.map { [$0] } ?? [] }
+}
+
 /// The whole environment of each kind of job: nothing of the app's own environment is passed on.
 nonisolated enum ToolEnvironment {
+    /// git with no system or global configuration (so no hooks, aliases or signing from them), no prompts and no
+    /// optional locks; Xcode's git finds its developer folder.
+    static func git(_ git: ExportGit, runFolder: String) -> [String: String] {
+        var environment = base(executable: git.program, runFolder: runFolder)
+        environment["GIT_CONFIG_NOSYSTEM"] = "1"
+        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
+        environment["GIT_OPTIONAL_LOCKS"] = "0"
+        environment["GIT_TERMINAL_PROMPT"] = "0"
+        if let root = git.root, root.hasSuffix("/usr") { environment["DEVELOPER_DIR"] = String(root.dropLast(4)) }
+        return environment
+    }
+
     /// TeX writes only into the run folder and runs no shell commands; Python, when there is one, reads no user site.
     static func export(texBin: String, python: String?, runFolder: String) -> [String: String] {
         let pythonBin = python.map { ($0 as NSString).deletingLastPathComponent }
