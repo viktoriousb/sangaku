@@ -47,6 +47,32 @@ enum ExportScreenWording {
 
     static let noOutcome = "No export of this problem has run since the app opened."
 
+    /// Under an export's name on the card: "7 pages · built 2 hours ago", or that its folder (if one was chosen)
+    /// holds no export.
+    static func onDisk(_ copy: ExportOnDisk?, kind: ExportKind, folder: String?, now: Date) -> String {
+        guard let copy else {
+            return folder.map { "No export in “" + ($0 as NSString).lastPathComponent + "”" } ?? "Not exported"
+        }
+        let when = copy.modified.map { relative($0, now: now) }
+        guard copy.pdf != nil else {
+            return (when.map { "Exported " + $0 } ?? "Exported") + (kind == .latex ? "; no PDF" : "")
+        }
+        let parts = [copy.pages.map { Prose.count($0, "page") }, when.map { "built " + $0 }].compactMap { $0 }
+        return parts.isEmpty ? "Exported" : parts.joined(separator: " · ")
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.dateTimeStyle = .named
+        return formatter
+    }()
+
+    /// "2 hours ago", "yesterday", "now".
+    static func relative(_ date: Date, now: Date) -> String {
+        relativeFormatter.localizedString(for: min(date, now), relativeTo: now)
+    }
+
     /// Under the plan: what happens on Export.
     static let onExport = "Nothing runs and nothing is written until you click Export. Every text passed the export's gate: prose is printed as typed, and mathematics may use only listed commands and the notation's macros."
 

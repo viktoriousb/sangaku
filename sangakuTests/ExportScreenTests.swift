@@ -44,6 +44,16 @@ struct ExportScreenTests {
         #expect(ExportScreenWording.region("manuscript/preface.tex") == nil)
         let done = ExportOutcome(kind: .leanProject, folder: "/x", written: ["a", "b"], at: .now)
         #expect(ExportScreenWording.outcome(done) == "Lean Project exported: 2 files written to /x. Committed with git.")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(ExportScreenWording.onDisk(nil, kind: .hashtag, folder: nil, now: now) == "Not exported")
+        #expect(ExportScreenWording.onDisk(nil, kind: .hashtag, folder: "/x/paper", now: now) == "No export in “paper”",
+                "a folder chosen, with no export in it")
+        let built = ExportOnDisk(folder: "/x", pdf: "/x/manuscript/main.pdf", pages: 7, modified: now - 7200)
+        #expect(ExportScreenWording.onDisk(built, kind: .hashtag, folder: "/x", now: now) == "7 pages · built 2 hours ago")
+        #expect(ExportScreenWording.onDisk(ExportOnDisk(folder: "/x", modified: now - 86_400), kind: .leanProject, folder: "/x", now: now)
+                == "Exported yesterday")
+        #expect(ExportScreenWording.onDisk(ExportOnDisk(folder: "/x"), kind: .latex, folder: "/x", now: now) == "Exported; no PDF",
+                "pdfLaTeX was not set up")
         let failed = ExportOutcome(kind: .hashtag, folder: "/x", error: .stopped, at: .now)
         #expect(ExportScreenWording.outcome(failed) == "hashtag Manuscript not exported. The export was stopped. Nothing was written to the folder.")
         #expect(ExportScreenWording.checks(ExportPreviewData.failedBuild).contains("FAIL every item has a label               lemma ch1-results.tex:40"))
@@ -71,8 +81,19 @@ struct ExportScreenTests {
         let graph = StatementGraphState.read(problem: fixture.problem, people: people)
         let verification = VerificationState.read(problem: fixture.problem, people: people)
         try render("export-card", width: 340) { ExportCard(problem: fixture.problem, graph: graph, verification: verification) }
-        try render("export-card-dark", width: 340, dark: true) {
-            ExportCard(problem: fixture.problem, graph: graph, verification: verification)
+        let page = try #require(Self.page())
+        let onDisk: [ExportKind: ExportOnDisk] = [
+            .hashtag: ExportOnDisk(folder: "/x", pdf: "/x/manuscript/main.pdf", pages: 7, modified: .now - 7200, thumbnail: page),
+            .latex: ExportOnDisk(folder: "/y", pdf: "/y/p.pdf", pages: 4, modified: .now - 90_000, thumbnail: page),
+        ]
+        for dark in [false, true] {
+            try render(dark ? "export-card-rows-dark" : "export-card-rows", width: 340, dark: dark) {
+                ExportCard(problem: fixture.problem, graph: graph, verification: verification, sample: onDisk)
+            }
+        }
+        try render("export-card-statement", width: 340) {
+            AIUseSection(problem: fixture.problem, people: people, graph: graph, verification: verification,
+                         isExpanded: .constant(true))
         }
         for kind in ExportKind.allCases {
             let plan = try await fixture.state.export.plan(ExportRequest(problemID: fixture.problem.stableID, kind: kind, folder: folder))
@@ -85,6 +106,21 @@ struct ExportScreenTests {
                 report: ExportPreviewData.failedBuild, at: .now))
         }
         try render("export-settings", width: 560) { Form { ExportSettingsSection(settings: fixture.state.toolSettings) }.formStyle(.grouped) }
+    }
+
+    /// A page for the card's thumbnails: white, with lines of text.
+    private static func page() -> CGImage? {
+        let size = ExportOnDisk.thumbnailSize
+        guard let context = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.setFillColor(.white)
+        context.fill(CGRect(origin: .zero, size: size))
+        context.setFillColor(CGColor(gray: 0.6, alpha: 1))
+        for line in stride(from: 12, to: Int(size.height) - 16, by: 7) {
+            context.fill(CGRect(x: 10, y: line, width: Int(size.width) - 20, height: 2))
+        }
+        return context.makeImage()
     }
 
     @Test("The card and the menu go through one handler: open a plan, show the report, stop")

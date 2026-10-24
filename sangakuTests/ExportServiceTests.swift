@@ -175,6 +175,8 @@ struct ExportServiceTests {
         #expect(try harness.tracked().isSuperset(of: ["build.sh", ".gitignore", ".kit-manifest", "manuscript/preface.tex",
                                                       "manuscript/htag-registry.tex", ExportManifest.fileName]))
         #expect(try harness.git(["status", "--porcelain"]) == "?? manuscript/main.pdf\n")
+        let onDisk = try #require(await ExportOnDisk.read(folder: harness.folder, kind: .hashtag, problem: harness.problem))
+        #expect(onDisk.pdf == harness.folder + "/manuscript/main.pdf" && onDisk.pages == first.report?.counts?.pages)
 
         // Again with nothing changed: nothing to commit.
         let same = try await harness.export(.hashtag)
@@ -238,6 +240,11 @@ struct ExportServiceTests {
                                                                 people: harness.fixture.state.problems.personIDs()))
         #expect(harness.exists(name + ".tex") && harness.exists(name + ".pdf") && harness.exists(ExportManifest.fileName))
         #expect(try harness.tracked() == [name + ".tex", ExportManifest.fileName], "the PDF is rebuilt from the file")
+        let onDisk = try #require(await ExportOnDisk.read(folder: harness.folder, kind: .latex, problem: harness.problem))
+        #expect(onDisk.pdf == harness.folder + "/" + name + ".pdf" && (onDisk.pages ?? 0) > 0)
+        #expect(onDisk.thumbnail?.width == Int(ExportOnDisk.thumbnailSize.width) && onDisk.modified != nil)
+        #expect(await ExportOnDisk.read(folder: harness.folder, kind: .hashtag, problem: harness.problem) == nil)
+        #expect(await ExportOnDisk.read(folder: harness.folder, kind: .latex, problem: UUID()) == nil, "another problem's")
         #expect(try harness.commits() == [TestGitHome.identity + "|Export the LaTeX file"])
 
         let other = try ExportHarness()
@@ -245,6 +252,8 @@ struct ExportServiceTests {
         #expect(lean.succeeded, "\(lean.error?.message ?? "")")
         #expect(other.exists("lakefile.toml") && other.exists("README.md") && other.exists("lean-toolchain"))
         #expect(try other.commits() == [TestGitHome.identity + "|Export the Lean project"])
+        let project = try #require(await ExportOnDisk.read(folder: other.folder, kind: .leanProject, problem: other.problem))
+        #expect(project.pdf == nil && project.pages == nil && project.modified != nil)
         #expect(try other.git(["status", "--porcelain"]).isEmpty)
     }
 
@@ -707,6 +716,28 @@ struct ExportPartsTests {
         #expect(ExportWording.failedRun("pdfLaTeX", .exited(1), output: "  ! Emergency stop.\n") == "pdfLaTeX ended with status 1: ! Emergency stop.")
         #expect(ExportWording.failedRun("kit.py new", .signaled(9), output: "") == "kit.py new ended on signal 9.")
         #expect(ExportWording.failedRun("x", .exited(2), output: String(repeating: "a", count: 1000)).count < 450, "only the end")
+    }
+
+    @Test("The LaTeX export's PDF is the newest one beside a LaTeX file of its name; the manuscript's is main.pdf")
+    func pdfInFolder() throws {
+        let folder = ProcessExecutor.canonical(FileManager.default.temporaryDirectory.path) + "/sangaku-pdf-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: folder + "/manuscript", withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        func touch(_ name: String, _ date: Date) throws {
+            try Data().write(to: URL(fileURLWithPath: folder + "/" + name))
+            try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: folder + "/" + name)
+        }
+        #expect(ExportFolder.pdf(in: folder, kind: .latex) == nil)
+        try touch("old.tex", .now - 100)
+        try touch("old.pdf", .now - 100)
+        try touch("new.tex", .now)
+        try touch("new.pdf", .now)
+        try touch("mine.pdf", .now + 100)
+        #expect(ExportFolder.pdf(in: folder, kind: .latex) == folder + "/new.pdf", "mine.pdf has no LaTeX file beside it")
+        #expect(ExportFolder.pdf(in: folder, kind: .hashtag) == nil)
+        try touch("manuscript/main.pdf", .now)
+        #expect(ExportFolder.pdf(in: folder, kind: .hashtag) == folder + "/manuscript/main.pdf")
+        #expect(ExportFolder.pdf(in: folder, kind: .leanProject) == nil)
     }
 
     @Test("Approval: only the plan shown, by digest")

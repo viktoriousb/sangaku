@@ -1508,3 +1508,53 @@ text, so they keep the label as written.
 - The Preface's "Use of AI." paragraph has no heading of its own; it runs on from "Provenance and status.".
 - Exporting in the running app with your own data is not tried yet. The Settings ▸ Export tab was snapshotted: the
   longer footer still fits.
+
+## 2026-10-23: The export card, redesigned
+
+Chosen from five mockups (A, document rows with Quick Look): the card had no way to see an exported PDF, and kept
+only the last export of any kind.
+
+### What was built
+
+- One row per export (the hashtag manuscript, the LaTeX file, the Lean project): the PDF's first page, "7 pages ·
+  built 2 hours ago" or "Not exported", View, and Export… or Update…. View, or a click on the page, opens the PDF in
+  Quick Look (SwiftUI's `quickLookPreview`). A row's context menu adds Show in Finder; its tooltip is the folder.
+- `ExportOnDisk` reads what each export's folder holds now, off the main actor: only a folder whose manifest is this
+  problem's export of that kind; its PDF (`ExportFolder.pdf`: the manuscript's `main.pdf`, or the newest PDF beside
+  a LaTeX file of its name), page count, date and first-page thumbnail (PDFKit). The card reads it when it appears,
+  when a remembered folder changes and after every export, so the rows survive a relaunch.
+- The running export, Stop, and how the last export ended (Show Report…, Show in Finder) stay under the rows.
+- The AI-use statement is folded under its heading with Copy beside it; it is read only when shown or copied. Open
+  or closed is kept per window.
+
+### Tests
+
+- The row's words; which PDF is the LaTeX export's; what the reader finds after real LaTeX, Lean and manuscript
+  exports (another problem's or kind's folder reads as nothing). The card rendered with sample rows in light and
+  dark, and the statement rendered unfolded.
+
+### Review
+
+One reviewer (correctness, SwiftUI, accessibility) found:
+- **Another problem's rows.** Switching problems could show the last problem's rows. A cancelled read still wrote
+  its result, and the rows were not tied to a problem. Rows now carry the problem they were read for, the read key
+  includes it, and a cancelled read writes nothing.
+- **A flash of "Not exported".** It showed before the folders were read. Until then a row says nothing, and its
+  button follows whether a folder is remembered.
+- **Accessibility.**
+  - The thumbnail is hidden from VoiceOver and Tab, since it does what View does.
+  - View and Update name their export.
+  - Copy reads as "Copy Statement".
+  - A row has a Show in Finder action.
+- **A folder chosen with no export in it** (an export there failed or was stopped). It now says "No export in
+  “paper”", not "Not exported".
+- **The unfolded statement** is now rendered by the test.
+
+### Not done
+
+- Not tried by hand: VoiceOver and Tab on Copy in the statement's heading, and Quick Look while a text field has
+  focus.
+- "built 2 hours ago" is not refreshed while the panel stays open, and a PDF rebuilt outside the app shows only
+  after the next export or the next time the card appears.
+- Which statements changed since an export (the mockups' "2 statements changed since") is not built: the export
+  would first have to record what it wrote.
